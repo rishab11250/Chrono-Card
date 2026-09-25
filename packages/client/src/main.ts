@@ -14,9 +14,26 @@ import {
   type Position,
   type RoomView,
 } from '@chrono/shared';
-import { createBoard } from './board';
 import { API_URL, Network } from './net';
 import { icon } from './icons';
+
+type Board = {
+  update: (state: GameState, targets: Position[]) => void;
+  destroy: () => void;
+};
+let boardInstance: Board | null = null;
+let boardLoading: Promise<Board> | null = null;
+
+function loadBoard(): Promise<Board> {
+  if (boardInstance) return Promise.resolve(boardInstance);
+  if (!boardLoading) {
+    boardLoading = import('./board').then(({ createBoard }) => {
+      boardInstance = createBoard($('#phaser-board'));
+      return boardInstance;
+    });
+  }
+  return boardLoading;
+}
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) =>
   document.querySelector<T>(selector)!;
@@ -83,7 +100,6 @@ $('#app').innerHTML = `
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <dialog id="modal" aria-labelledby="modal-title"><div id="modal-content"></div></dialog>
 `;
-const board = createBoard($('#phaser-board'));
 const modal = $<HTMLDialogElement>('#modal');
 let toastTimer: number;
 function toast(message: string) {
@@ -95,22 +111,73 @@ function toast(message: string) {
     el.hidden = true;
   }, 5000);
 }
-function beep() {
+function beep(
+  type: 'move' | 'attack' | 'support' | 'end' | 'default' = 'default',
+) {
   if (!sound) return;
   const audio = new AudioContext();
   const oscillator = audio.createOscillator();
   const gain = audio.createGain();
-  oscillator.type = 'square';
-  oscillator.frequency.setValueAtTime(420, audio.currentTime);
+
+  const configs: Record<
+    typeof type,
+    {
+      wave: OscillatorType;
+      startFreq: number;
+      endFreq: number;
+      gainVal: number;
+      duration: number;
+    }
+  > = {
+    move: {
+      wave: 'sine',
+      startFreq: 280,
+      endFreq: 180,
+      gainVal: 0.05,
+      duration: 0.08,
+    },
+    attack: {
+      wave: 'sawtooth',
+      startFreq: 580,
+      endFreq: 120,
+      gainVal: 0.08,
+      duration: 0.13,
+    },
+    support: {
+      wave: 'triangle',
+      startFreq: 440,
+      endFreq: 880,
+      gainVal: 0.07,
+      duration: 0.18,
+    },
+    end: {
+      wave: 'triangle',
+      startFreq: 330,
+      endFreq: 220,
+      gainVal: 0.06,
+      duration: 0.12,
+    },
+    default: {
+      wave: 'square',
+      startFreq: 420,
+      endFreq: 220,
+      gainVal: 0.07,
+      duration: 0.15,
+    },
+  };
+
+  const c = configs[type] ?? configs.default;
+  oscillator.type = c.wave;
+  oscillator.frequency.setValueAtTime(c.startFreq, audio.currentTime);
   oscillator.frequency.exponentialRampToValueAtTime(
-    220,
-    audio.currentTime + 0.12,
+    c.endFreq,
+    audio.currentTime + c.duration * 0.8,
   );
-  gain.gain.setValueAtTime(0.07, audio.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.15);
+  gain.gain.setValueAtTime(c.gainVal, audio.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + c.duration);
   oscillator.connect(gain).connect(audio.destination);
   oscillator.start();
-  oscillator.stop(audio.currentTime + 0.16);
+  oscillator.stop(audio.currentTime + c.duration + 0.01);
   oscillator.onended = () => {
     void audio.close();
   };
@@ -140,6 +207,11 @@ function setSelection(index: number | null) {
 }
 async function act(action: GameAction) {
   if (!canPlay()) return;
+  const playedCardId =
+    action.type === 'play' ? activePlayer(game).hand[action.card] : null;
+  const soundCategory = playedCardId
+    ? (CARDS[playedCardId]?.category ?? 'default')
+    : 'end';
   busy = true;
   render();
   try {
@@ -150,7 +222,7 @@ async function act(action: GameAction) {
     }
     selected = null;
     targets = [];
-    beep();
+    beep(soundCategory);
   } catch (error) {
     toast(
       error instanceof Error ? error.message : 'That move could not be played.',
@@ -332,7 +404,16 @@ function render() {
       targets.some((t) => same(t, { x, y })),
     );
   }
-  board.update(game, targets);
+  const inLobby =
+    Boolean(room && !room.game) ||
+    (!room &&
+      (new URLSearchParams(location.search).has('room') ||
+        new URLSearchParams(location.search).has('watch')));
+  if (boardInstance) {
+    boardInstance.update(game, targets);
+  } else if (!inLobby) {
+    void loadBoard().then((b) => b.update(game, targets));
+  }
   $('#outcome').hidden = game.phase === 'playing';
   if (game.phase !== 'playing') {
     $('#outcome').innerHTML =
@@ -593,7 +674,7 @@ $('#sound-button').onclick = () => {
   sound = !sound;
   $('#sound-button').innerHTML = `♫ &nbsp; Sound ${sound ? 'on' : 'off'}`;
   $('#sound-button').setAttribute('aria-pressed', `${sound}`);
-  beep();
+  beep('support');
 };
 $('#mobile-help').onclick = help;
 modal.addEventListener('click', (event) => {

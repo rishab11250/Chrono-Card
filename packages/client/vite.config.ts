@@ -8,6 +8,12 @@ export default defineConfig({
     },
   },
   build: {
-    rollupOptions: { output: { manualChunks: { phaser: ['phaser'] } } },
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('phaser')) return 'phaser';
+        },
+      },
+    },
   },
 });

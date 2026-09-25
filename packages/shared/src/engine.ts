@@ -133,19 +133,36 @@ function loadLevel(s: GameState) {
     p.shield = 0;
     p.bonus = 0;
   });
+  const spawnTiles: Position[] = [];
+  const tiles = LEVELS[s.level].tiles;
+  for (let y = 1; y < 9; y++) {
+    for (let x = 1; x < 9; x++) {
+      if (
+        tiles[y][x] === '.' &&
+        (x > 2 || y > 2) &&
+        !positions.some((p) => same(p, { x, y }))
+      ) {
+        spawnTiles.push({ x, y });
+      }
+    }
+  }
+  const available = shuffle(s, [...spawnTiles]);
   s.enemies = LEVELS[s.level].enemies.map((e, index) => ({
     ...e,
+    ...(available[index] ?? { x: e.x, y: e.y }),
     id: `e${s.level}-${index}`,
     hp: ENEMIES[e.kind].hp,
     heading: Math.floor(random(s) * 4),
     intent: { attack: [] },
   }));
   for (let i = 1; i < s.players.length; i++) {
-    const position = [
-      { x: 8, y: 3 },
-      { x: 1, y: 6 },
-      { x: 5, y: 8 },
-    ][i - 1];
+    const position =
+      available[LEVELS[s.level].enemies.length + i - 1] ??
+      [
+        { x: 8, y: 3 },
+        { x: 1, y: 6 },
+        { x: 5, y: 8 },
+      ][i - 1];
     s.enemies.push({
       ...position,
       id: `e${s.level}-extra${i}`,
