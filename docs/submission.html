@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Chrono Card — Concept and Prompt Log</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 0;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        color: #263529;
+        background: #fff;
+        font-size: 10.5pt;
+        line-height: 1.5;
+      }
+      .page {
+        width: 210mm;
+        height: 297mm;
+        padding: 19mm 20mm 17mm;
+        position: relative;
+        break-after: page;
+        overflow: hidden;
+      }
+      .page:last-child {
+        break-after: auto;
+      }
+      .eyebrow {
+        font-size: 8pt;
+        letter-spacing: 2px;
+        font-weight: bold;
+        color: #64764c;
+      }
+      h1 {
+        font-size: 43pt;
+        letter-spacing: -2px;
+        line-height: 1;
+        margin: 7mm 0 4mm;
+      }
+      h1 span {
+        color: #6f8644;
+      }
+      h2 {
+        font-size: 17pt;
+        letter-spacing: -0.4px;
+        margin: 7mm 0 2mm;
+      }
+      h3 {
+        font-size: 10pt;
+        margin: 0 0 2mm;
+      }
+      p {
+        margin: 2mm 0 4mm;
+      }
+      .lead {
+        font-size: 14pt;
+        line-height: 1.45;
+        max-width: 155mm;
+      }
+      .strip {
+        background: #e7eed8;
+        border-left: 3px solid #7e9654;
+        padding: 4mm 5mm;
+        margin: 6mm 0;
+      }
+      .columns {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8mm;
+      }
+      .small {
+        font-size: 9pt;
+        color: #54624a;
+      }
+      .tag {
+        font-size: 8pt;
+        letter-spacing: 1px;
+        font-weight: bold;
+        color: #60713e;
+      }
+      .footer {
+        position: absolute;
+        bottom: 13mm;
+        left: 20mm;
+        right: 20mm;
+        border-top: 1px solid #d6dfce;
+        padding-top: 3mm;
+        display: flex;
+        justify-content: space-between;
+        font-size: 8pt;
+        color: #667757;
+      }
+      ul {
+        padding-left: 5mm;
+        margin: 2mm 0;
+      }
+      li {
+        margin: 1.5mm 0;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 9pt;
+      }
+      td,
+      th {
+        text-align: left;
+        vertical-align: top;
+        border-bottom: 1px solid #dce3d5;
+        padding: 3mm 2mm;
+      }
+      th {
+        font-size: 8pt;
+        color: #64764c;
+        letter-spacing: 1px;
+      }
+      td:first-child {
+        width: 29mm;
+        font-weight: bold;
+      }
+      .quote {
+        font-family: Georgia, serif;
+        font-size: 12pt;
+        background: #f0f3e9;
+        padding: 4mm 5mm;
+        border-left: 3px solid #8ca06a;
+        margin: 4mm 0;
+      }
+      code {
+        font-size: 9pt;
+        background: #edf1e6;
+        padding: 1mm;
+      }
+      .meta {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 7mm;
+      }
+      .rule {
+        height: 1px;
+        background: #cbd6be;
+        margin: 6mm 0;
+      }
+      .log-entry {
+        margin: 4mm 0;
+      }
+      .log-entry strong {
+        font-size: 9pt;
+        color: #4c6536;
+      }
+      .log-entry p {
+        font-size: 10pt;
+        margin-top: 1mm;
+      }
+      .page:last-child {
+        font-size: 9.5pt;
+        line-height: 1.4;
+      }
+      .page:last-child .log-entry {
+        margin: 3mm 0;
+      }
+      .page:last-child .log-entry p {
+        font-size: 9.5pt;
+      }
+      .page:last-child .quote {
+        font-size: 11pt;
+        margin: 3mm 0;
+        padding: 3mm 5mm;
+      }
+      .page:last-child .rule {
+        margin: 4mm 0;
+      }
+      .page:last-child .strip {
+        margin: 4mm 0;
+        padding: 3mm 5mm;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="page">
+      <div class="meta">
+        <span class="eyebrow">HACKATHON · SEPTEMBER 2026</span
+        ><span class="eyebrow">CONCEPT / 01</span>
+      </div>
+      <h1>CHRONO<br />CARD<span>.</span></h1>
+      <p class="lead">
+        A little strategy. A little borrowed time.<br />A dungeon crawler where
+        every move is a card.
+      </p>
+      <div class="strip">
+        Draw a hand. Read the enemy’s next move. Spend two plays to change your
+        fate. Escape five rooms—alone, beside a friend, or in a live party of
+        four.
+      </div>
+      <div class="columns">
+        <div>
+          <h2>The idea</h2>
+          <p>
+            Replace reflexes with deliberate choices. Movement, combat, and
+            teamwork all come from the same hand. Every enemy announces its
+            exact attack tiles before the party acts, so a risky move is an
+            informed decision.
+          </p>
+        </div>
+        <div>
+          <h2>The experience</h2>
+          <p>
+            A compact pixel dungeon and a parchment card hand keep the next
+            decision visible. Click a card, then a highlighted tile. Separate HP
+            pools and alternating turns make co-op easy to follow.
+          </p>
+        </div>
+      </div>
+      <h2>What is playable</h2>
+      <table>
+        <tbody>
+          <tr>
+            <td>Core expedition</td>
+            <td>
+              Five authored rooms; ten card types; turret, patroller, and chaser
+              enemies; telegraphed attacks; shields, hazards, healing, win and
+              loss.
+            </td>
+          </tr>
+          <tr>
+            <td>Three ways to play</td>
+            <td>
+              Offline solo, local couch duo, and authoritative online co-op for
+              2–4 players with codes, invite links, and a 90-second reconnect
+              window.
+            </td>
+          </tr>
+          <tr>
+            <td>Extra features</td>
+            <td>
+              View-only spectator links and a UTC daily seed challenge. The
+              server records completed runs to a persistent SQLite leaderboard.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <h2>Built to stay in sync</h2>
+      <p>
+        TypeScript workspaces share one deterministic rules engine between the
+        Phaser 3 client and the Node/Express + Socket.IO server. Online clients
+        send intentions; the server validates and resolves them. Redis snapshots
+        restore rooms, while SQLite keeps completed daily scores.
+      </p>
+      <p class="small">
+        <strong>Delivery:</strong> runnable source, tests, deployment
+        configuration, and this two-page PDF. Public hosting is deferred by the
+        owner. Local start: <code>npm ci &amp;&amp; npm run dev</code>; open
+        <code>localhost:5173</code>.
+      </p>
+      <div class="footer">
+        <span>CHRONO CARD · CONCEPT SUMMARY</span><span>01 / 02</span>
+      </div>
+    </section>
+    <section class="page">
+      <div class="meta">
+        <span class="eyebrow">CHRONO CARD</span
+        ><span class="eyebrow">PROMPT LOG / 02</span>
+      </div>
+      <h2 style="font-size: 30pt; margin-top: 0">From brief to playable.</h2>
+      <p>
+        This log records the actual instructions visible in the implementation
+        session. Development decisions below summarize the assistant’s work;
+        they are not invented user prompts or claims of human playtesting.
+      </p>
+      <div class="log-entry">
+        <strong>01 · USER REQUEST</strong>
+        <div class="quote">“read prd and timeline and complete all work.”</div>
+        <p>
+          Inputs: the Chrono Card product requirements and day-by-day timeline.
+          The repository initially contained only its README.
+        </p>
+      </div>
+      <div class="log-entry">
+        <strong>02 · IMPLEMENTATION DECISIONS</strong>
+        <p>
+          Selected separate HP, alternating turns, five rooms, and a shared
+          deterministic engine. Built the card set and fixed enemy telegraphs
+          first, then the Phaser/DOM interface, authoritative networking,
+          reconnect handling, persistence, and extra features.
+        </p>
+      </div>
+      <div class="log-entry">
+        <strong>03 · ASSISTANT CLARIFICATION</strong>
+        <p>
+          Asked whether an existing Render/Railway server project and
+          Vercel/Netlify client project should be used for the PRD’s public
+          hosting deliverable, while continuing local implementation.
+        </p>
+      </div>
+      <div class="log-entry">
+        <strong>04 · USER DIRECTION</strong>
+        <div class="quote">“will deploy it later”</div>
+        <p>
+          Public deployment and hosted smoke testing were deferred. Render,
+          Vercel, and Docker configuration plus an explicit deployment checklist
+          are included for the later launch.
+        </p>
+      </div>
+      <div class="rule"></div>
+      <div class="columns">
+        <div>
+          <h3>How the work was checked</h3>
+          <ul>
+            <li>
+              Card effects, legal targets, seeded replay, turn order, and all
+              five rooms.
+            </li>
+            <li>Legal solo, duo, and four-player full-run simulations.</li>
+            <li>
+              Real Socket.IO party completion, spectators, private tokens, stale
+              actions, and reconnects.
+            </li>
+            <li>
+              Chromium checks for visible gameplay, refresh, mobile layout, and
+              keyboard controls.
+            </li>
+          </ul>
+        </div>
+        <div>
+          <h3>AI contribution and boundaries</h3>
+          <p>
+            The assistant authored the implementation, original procedural
+            pixel/SVG artwork, tests, and handoff documents. The frontend design
+            skill guided the visual hierarchy and readable telegraphs.
+          </p>
+          <p>
+            Optional ghost allies and cosmetic unlocks remain outside launch
+            scope. Cloud hosting was not performed. No public link is
+            represented as live.
+          </p>
+        </div>
+      </div>
+      <div class="strip small">
+        <strong>Reproducible handoff:</strong> <code>npm run build</code>,
+        <code>npm test</code>, and <code>npm run test:e2e</code>. This PDF is
+        generated from editable HTML with <code>npm run docs:pdf</code>. Add the
+        final hosted links before submission.
+      </div>
+      <div class="footer">
+        <span>CHRONO CARD · PROMPT LOG &amp; DELIVERY NOTES</span
+        ><span>02 / 02</span>
+      </div>
+    </section>
+  </body>
+</html>

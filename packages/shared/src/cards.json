@@ -1,0 +1,84 @@
+[
+  {
+    "id": "step1",
+    "name": "Step I",
+    "category": "move",
+    "icon": "↟",
+    "description": "Move 1 tile in a straight line.",
+    "range": 1
+  },
+  {
+    "id": "step2",
+    "name": "Step II",
+    "category": "move",
+    "icon": "⇈",
+    "description": "Move up to 2 tiles in a straight line.",
+    "range": 2
+  },
+  {
+    "id": "dash",
+    "name": "Phase dash",
+    "category": "move",
+    "icon": "↯",
+    "description": "Move up to 3 tiles. Pass through enemies and allies.",
+    "range": 3
+  },
+  {
+    "id": "swap",
+    "name": "Slipstream",
+    "category": "move",
+    "icon": "⇄",
+    "description": "Swap with an adjacent tile or any living ally. Hazards still hurt.",
+    "range": 1
+  },
+  {
+    "id": "strike",
+    "name": "Iron edge",
+    "category": "attack",
+    "icon": "⚔",
+    "description": "Deal 2 damage to an adjacent enemy.",
+    "range": 1
+  },
+  {
+    "id": "arrow",
+    "name": "Light lance",
+    "category": "attack",
+    "icon": "➶",
+    "description": "Deal 2 damage in a straight line, up to 2 tiles away.",
+    "range": 2
+  },
+  {
+    "id": "shield",
+    "name": "Aegis",
+    "category": "support",
+    "icon": "◇",
+    "description": "Block the next hit. Target yourself or a living ally.",
+    "range": 10
+  },
+  {
+    "id": "redraw",
+    "name": "Second chance",
+    "category": "support",
+    "icon": "⟳",
+    "description": "Replace your remaining hand. Costs no play.",
+    "range": 0
+  },
+  {
+    "id": "boost",
+    "name": "Borrowed time",
+    "category": "support",
+    "icon": "⌛",
+    "description": "Give an ally one extra play on their next turn.",
+    "range": 10,
+    "coop": true
+  },
+  {
+    "id": "taunt",
+    "name": "Challenge",
+    "category": "support",
+    "icon": "◎",
+    "description": "Redirect one enemy’s announced attack to your current tile.",
+    "range": 10,
+    "coop": true
+  }
+]

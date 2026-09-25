@@ -1,0 +1,20 @@
+{
+  "turret": {
+    "name": "Sentinel",
+    "hp": 2,
+    "damage": 2,
+    "description": "Stays still. Fires a rotating beam up to 3 tiles."
+  },
+  "patroller": {
+    "name": "Warden",
+    "hp": 2,
+    "damage": 1,
+    "description": "Patrols horizontally. Strikes the four adjacent tiles."
+  },
+  "chaser": {
+    "name": "Seeker",
+    "hp": 2,
+    "damage": 1,
+    "description": "Steps toward the nearest explorer. Strikes adjacent tiles."
+  }
+}
