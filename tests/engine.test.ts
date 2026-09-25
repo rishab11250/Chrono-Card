@@ -81,9 +81,6 @@ describe('content and deterministic turns', () => {
           if (tile !== '#') expect(visited.has(`${x},${y}`)).toBe(true);
         }),
       );
-      level.enemies.forEach((e) =>
-        expect(visited.has(`${e.x},${e.y}`)).toBe(true),
-      );
     }
   });
   it('replays the same seed and actions identically without mutating inputs', () => {
@@ -229,6 +226,7 @@ describe('card effects', () => {
     expect(next.plays).toBe(3);
     next.players[1].hand = ['taunt'];
     const e = next.enemies[0];
+    e.kind = 'chaser';
     const taunted = play(next, e.x, e.y);
     expect(taunted.enemies[0].intent.attack).toEqual([{ x: 2, y: 1 }]);
   });

@@ -21,18 +21,6 @@
             "#.......E#",
             "##########"
           ],
-          "enemies": [
-            {
-              "kind": "patroller",
-              "x": 6,
-              "y": 3
-            },
-            {
-              "kind": "turret",
-              "x": 7,
-              "y": 6
-            }
-          ],
           "choiceDescription": "Follow the moss-lit entrance into the ruins.",
           "next": [
             "cinder",
@@ -52,18 +40,6 @@
             "#..#.~.....#",
             "#.........E#",
             "############"
-          ],
-          "enemies": [
-            {
-              "kind": "chaser",
-              "x": 6,
-              "y": 3
-            },
-            {
-              "kind": "turret",
-              "x": 9,
-              "y": 5
-            }
           ],
           "choiceDescription": "The safer-looking passage: open stone lanes and smoldering traps.",
           "next": [
@@ -85,23 +61,6 @@
             "#........#",
             "#.......E#",
             "##########"
-          ],
-          "enemies": [
-            {
-              "kind": "patroller",
-              "x": 5,
-              "y": 4
-            },
-            {
-              "kind": "chaser",
-              "x": 7,
-              "y": 6
-            },
-            {
-              "kind": "bomber",
-              "x": 4,
-              "y": 7
-            }
           ],
           "choiceDescription": "The rewarding-looking archive: old treasures guarded by wandering sentinels.",
           "next": [
@@ -126,23 +85,6 @@
             "#.....E#",
             "########"
           ],
-          "enemies": [
-            {
-              "kind": "chaser",
-              "x": 4,
-              "y": 4
-            },
-            {
-              "kind": "turret",
-              "x": 2,
-              "y": 7
-            },
-            {
-              "kind": "patroller",
-              "x": 5,
-              "y": 9
-            }
-          ],
           "choiceDescription": "Narrow ledges lead toward the first warden.",
           "next": [
             "irongate"
@@ -163,22 +105,22 @@
             "#........E#",
             "###########"
           ],
-          "enemies": [
-            {
-              "kind": "warden_elite",
-              "x": 5,
-              "y": 4
-            },
-            {
-              "kind": "bomber",
-              "x": 8,
-              "y": 3
-            }
-          ],
           "choiceDescription": "Face the warden guarding the way below.",
           "next": []
         }
-      ]
+      ],
+      "difficulty": {
+        "baseThreat": 3,
+        "threatPerDepth": 1,
+        "threatPerAlly": 1,
+        "pool": [
+          "chaser",
+          "patroller",
+          "turret",
+          "bomber"
+        ],
+        "boss": "warden_elite"
+      }
     },
     {
       "id": "vaults",
@@ -200,23 +142,6 @@
             "#....#...#.E#",
             "#############"
           ],
-          "enemies": [
-            {
-              "kind": "patroller",
-              "x": 7,
-              "y": 3
-            },
-            {
-              "kind": "chaser",
-              "x": 7,
-              "y": 5
-            },
-            {
-              "kind": "turret",
-              "x": 10,
-              "y": 2
-            }
-          ],
           "choiceDescription": "Stone bridges wind through the drowned galleries.",
           "next": [
             "corridor",
@@ -236,23 +161,6 @@
             "#..########..#",
             "#...........E#",
             "##############"
-          ],
-          "enemies": [
-            {
-              "kind": "chaser",
-              "x": 5,
-              "y": 3
-            },
-            {
-              "kind": "turret",
-              "x": 11,
-              "y": 4
-            },
-            {
-              "kind": "patroller",
-              "x": 8,
-              "y": 6
-            }
           ],
           "choiceDescription": "The safer-looking corridor offers long lines of sight.",
           "next": [
@@ -274,23 +182,6 @@
             "#........#",
             "#.......E#",
             "##########"
-          ],
-          "enemies": [
-            {
-              "kind": "chaser_elite",
-              "x": 5,
-              "y": 3
-            },
-            {
-              "kind": "patroller",
-              "x": 6,
-              "y": 5
-            },
-            {
-              "kind": "chaser",
-              "x": 7,
-              "y": 7
-            }
           ],
           "choiceDescription": "The rewarding-looking hollow hides forgotten clockwork among its pillars.",
           "next": [
@@ -315,28 +206,6 @@
             "#.........E#",
             "############"
           ],
-          "enemies": [
-            {
-              "kind": "patroller",
-              "x": 8,
-              "y": 3
-            },
-            {
-              "kind": "chaser",
-              "x": 3,
-              "y": 7
-            },
-            {
-              "kind": "turret",
-              "x": 9,
-              "y": 8
-            },
-            {
-              "kind": "chaser",
-              "x": 8,
-              "y": 9
-            }
-          ],
           "choiceDescription": "Cross the open arena before the master vault.",
           "next": [
             "chronosmith"
@@ -358,27 +227,23 @@
             "#........E#",
             "###########"
           ],
-          "enemies": [
-            {
-              "kind": "warden_elite",
-              "x": 5,
-              "y": 4
-            },
-            {
-              "kind": "patroller",
-              "x": 3,
-              "y": 7
-            },
-            {
-              "kind": "bomber",
-              "x": 7,
-              "y": 7
-            }
-          ],
           "choiceDescription": "Defeat the Chrono-Smith and enter the fractured depths.",
           "next": []
         }
-      ]
+      ],
+      "difficulty": {
+        "baseThreat": 4,
+        "threatPerDepth": 1,
+        "threatPerAlly": 1,
+        "pool": [
+          "chaser",
+          "patroller",
+          "turret",
+          "bomber",
+          "chaser_elite"
+        ],
+        "boss": "warden_elite"
+      }
     },
     {
       "id": "fracture",
@@ -399,23 +264,6 @@
             "#.~~...~~.#",
             "#........E#",
             "###########"
-          ],
-          "enemies": [
-            {
-              "kind": "turret",
-              "x": 5,
-              "y": 4
-            },
-            {
-              "kind": "chaser",
-              "x": 8,
-              "y": 3
-            },
-            {
-              "kind": "patroller",
-              "x": 7,
-              "y": 6
-            }
           ],
           "choiceDescription": "Follow the broken causeway into the final Act.",
           "next": [
@@ -438,28 +286,6 @@
             "#..........E#",
             "#############"
           ],
-          "enemies": [
-            {
-              "kind": "turret",
-              "x": 6,
-              "y": 3
-            },
-            {
-              "kind": "chaser",
-              "x": 8,
-              "y": 5
-            },
-            {
-              "kind": "patroller",
-              "x": 4,
-              "y": 5
-            },
-            {
-              "kind": "bomber",
-              "x": 10,
-              "y": 6
-            }
-          ],
           "choiceDescription": "The safer-looking narthex offers many paths between its columns.",
           "next": [
             "penultimate"
@@ -481,28 +307,6 @@
             "#.......E#",
             "##########"
           ],
-          "enemies": [
-            {
-              "kind": "turret",
-              "x": 5,
-              "y": 4
-            },
-            {
-              "kind": "chaser",
-              "x": 7,
-              "y": 5
-            },
-            {
-              "kind": "patroller",
-              "x": 4,
-              "y": 7
-            },
-            {
-              "kind": "chaser",
-              "x": 7,
-              "y": 7
-            }
-          ],
           "choiceDescription": "The rewarding-looking hourglass chamber draws explorers toward its heart.",
           "next": [
             "penultimate"
@@ -523,28 +327,6 @@
             "#....~~....#",
             "#.........E#",
             "############"
-          ],
-          "enemies": [
-            {
-              "kind": "chaser_elite",
-              "x": 5,
-              "y": 2
-            },
-            {
-              "kind": "patroller",
-              "x": 7,
-              "y": 4
-            },
-            {
-              "kind": "chaser",
-              "x": 4,
-              "y": 6
-            },
-            {
-              "kind": "chaser",
-              "x": 8,
-              "y": 7
-            }
           ],
           "choiceDescription": "Reach the last gate beyond the fields of spikes.",
           "next": [
@@ -568,37 +350,23 @@
             "#...........E#",
             "##############"
           ],
-          "enemies": [
-            {
-              "kind": "chaser_elite",
-              "x": 6,
-              "y": 5
-            },
-            {
-              "kind": "turret",
-              "x": 3,
-              "y": 3
-            },
-            {
-              "kind": "turret",
-              "x": 10,
-              "y": 3
-            },
-            {
-              "kind": "chaser",
-              "x": 4,
-              "y": 8
-            },
-            {
-              "kind": "patroller",
-              "x": 9,
-              "y": 8
-            }
-          ],
           "choiceDescription": "Break the cycle in the final warden’s sanctum.",
           "next": []
         }
-      ]
+      ],
+      "difficulty": {
+        "baseThreat": 5,
+        "threatPerDepth": 1,
+        "threatPerAlly": 1,
+        "pool": [
+          "chaser",
+          "patroller",
+          "turret",
+          "bomber",
+          "chaser_elite"
+        ],
+        "boss": "warden_elite"
+      }
     }
   ]
 }

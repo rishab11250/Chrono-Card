@@ -12,6 +12,7 @@ import type {
   Position,
   TurnOrder,
   Act,
+  EnemyKind,
 } from './types';
 
 export const CARDS = Object.fromEntries(
@@ -26,6 +27,36 @@ export const LEVELS: Level[] = ACTS.flatMap(act => act.rooms.map((lvl) => ({
   height: lvl.tiles.length,
 })));
 export const levelIndex = (id: string) => LEVELS.findIndex(level => level.id === id);
+/** Difficulty follows graph depth, never the room's position in the flat UI adapter. */
+export function roomThreatBudget(level: Level, partySize: number): number {
+  const act=ACTS.find(act=>act.id===level.actId)!;
+  const depths=new Map<string,number>();
+  const visit=(id:string,depth:number,path:Set<string>)=>{
+    if(path.has(id))throw new Error('Act room graphs must be acyclic.');
+    if((depths.get(id)??-1)>=depth)return;
+    depths.set(id,depth);
+    const room=act.rooms.find(room=>room.id===id);
+    if(!room)throw new Error('Room graph references an unknown room.');
+    room.next.forEach(next=>visit(next,depth+1,new Set([...path,id])));
+  };
+  visit(act.entry,0,new Set());
+  if(!depths.has(level.id))throw new Error('Room must be reachable from its Act entry.');
+  const budget=act.difficulty;
+  return budget.baseThreat + depths.get(level.id)! * budget.threatPerDepth + Math.max(0,partySize-1)*budget.threatPerAlly;
+}
+function encounter(s: GameState): EnemyKind[] {
+  const level=LEVELS[s.level],act=ACTS.find(act=>act.id===level.actId)!;
+  let remaining=roomThreatBudget(level,s.players.filter(p=>!p.abandoned).length);
+  const roster:EnemyKind[]=[];
+  if(!level.next.length){roster.push(act.difficulty.boss);remaining-=ENEMIES[act.difficulty.boss].threat;}
+  while(remaining>0){
+    const pool=act.difficulty.pool.filter(kind=>ENEMIES[kind].threat<=remaining);
+    if(!pool.length)throw new Error('Enemy pool cannot fill the Act threat budget.');
+    const kind=pool[Math.floor(random(s)*pool.length)];
+    roster.push(kind);remaining-=ENEMIES[kind].threat;
+  }
+  return roster;
+}
 export function nextRoomIds(s: GameState): string[] {
   const level = LEVELS[s.level];
   if (level.next.length) return [...level.next];
@@ -208,29 +239,16 @@ function loadLevel(s: GameState) {
     }
   }
   const available = shuffle(s, [...spawnTiles]);
-  s.enemies = LEVELS[s.level].enemies.map((e, index) => ({
-    ...e,
-    ...(available[index] ?? { x: e.x, y: e.y }),
+  const roster=encounter(s);
+  if(roster.length>available.length)throw new Error('Room has insufficient floor space for its threat budget.');
+  s.enemies = roster.map((kind, index) => ({
+    kind,
+    ...available[index],
     id: `e${s.level}-${index}`,
-    hp: ENEMIES[e.kind].hp,
+    hp: ENEMIES[kind].hp,
     heading: Math.floor(random(s) * 4),
     intent: { attack: [] },
   }));
-  for (let i = 1; i < s.players.length; i++) {
-    const position = available[LEVELS[s.level].enemies.length + i - 1] ??
-      spawnTiles[i % spawnTiles.length] ?? {
-        x: Math.min(8, level.width - 2),
-        y: Math.min(3, level.height - 2),
-      };
-    s.enemies.push({
-      ...position,
-      id: `e${s.level}-extra${i}`,
-      kind: i % 2 ? 'chaser' : 'patroller',
-      hp: 2,
-      heading: 1,
-      intent: { attack: [] },
-    });
-  }
   s.active = Math.max(
     0,
     s.players.findIndex((p) => p.hp > 0),

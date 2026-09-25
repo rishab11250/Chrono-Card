@@ -40,11 +40,14 @@ export type Level = {
   name: string;
   subtitle: string;
   tiles: string[];
-  enemies: { kind: EnemyKind; x: number; y: number }[];
   width: number;
   height: number;
 };
-export type Act = { id: string; name: string; entry: string; rooms: Omit<Level, 'width' | 'height' | 'actId'>[] };
+export type Act = {
+  id: string; name: string; entry: string;
+  difficulty: { baseThreat: number; threatPerDepth: number; threatPerAlly: number; pool: EnemyKind[]; boss: EnemyKind };
+  rooms: Omit<Level, 'width' | 'height' | 'actId'>[];
+};
 export type Player = Position & {
   id: string;
   name: string;

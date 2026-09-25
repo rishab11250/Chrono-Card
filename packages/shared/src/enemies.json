@@ -3,32 +3,42 @@
     "name": "Sentinel",
     "hp": 2,
     "damage": 2,
-    "description": "Stays still. Fires a rotating beam up to 3 tiles."
+    "description": "Stays still. Fires a rotating beam up to 3 tiles.",
+    "threat": 2
   },
   "patroller": {
     "name": "Warden",
     "hp": 2,
     "damage": 1,
-    "description": "Patrols horizontally. Strikes the four adjacent tiles."
+    "description": "Patrols horizontally. Strikes the four adjacent tiles.",
+    "threat": 1
   },
   "chaser": {
     "name": "Seeker",
     "hp": 2,
     "damage": 1,
-    "description": "Steps toward the nearest explorer. Strikes adjacent tiles."
+    "description": "Steps toward the nearest explorer. Strikes adjacent tiles.",
+    "threat": 1
   },
   "warden_elite": {
     "name": "Chrono Warden",
     "hp": 4,
     "damage": 2,
-    "description": "Charges for two rounds, then strikes a wide cross. Enrages below half HP."
+    "description": "Charges for two rounds, then strikes a wide cross. Enrages below half HP.",
+    "threat": 4
   },
   "bomber": {
-    "name": "Cinder Bomber", "hp": 2, "damage": 0,
-    "description": "Stays still. Marks a tile, then leaves embers for three rounds. Embers hurt only on entry."
+    "name": "Cinder Bomber",
+    "hp": 2,
+    "damage": 0,
+    "description": "Stays still. Marks a tile, then leaves embers for three rounds. Embers hurt only on entry.",
+    "threat": 2
   },
   "chaser_elite": {
-    "name": "Eclipse Seeker", "hp": 4, "damage": 1,
-    "description": "A double-HP Seeker. Charges for two full rounds before its fixed attack and move."
+    "name": "Eclipse Seeker",
+    "hp": 4,
+    "damage": 1,
+    "description": "A double-HP Seeker. Charges for two full rounds before its fixed attack and move.",
+    "threat": 3
   }
 }
