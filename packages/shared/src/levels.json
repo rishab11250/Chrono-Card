@@ -25,20 +25,18 @@
     "name": "Cinder Passage",
     "subtitle": "The floor remembers the fire.",
     "tiles": [
-      "##########",
-      "#........#",
-      "#..~.....#",
-      "#..#..#..#",
-      "#.....~..#",
-      "#.~......#",
-      "#..#..#..#",
-      "#........#",
-      "#.......E#",
-      "##########"
+      "############",
+      "#..........#",
+      "#..~.#..#..#",
+      "#....#.....#",
+      "#..#....~..#",
+      "#..#.~.....#",
+      "#.........E#",
+      "############"
     ],
     "enemies": [
-      { "kind": "chaser", "x": 6, "y": 4 },
-      { "kind": "turret", "x": 7, "y": 7 }
+      { "kind": "chaser", "x": 6, "y": 3 },
+      { "kind": "turret", "x": 9, "y": 5 }
     ]
   },
   {
@@ -64,6 +62,91 @@
     ]
   },
   {
+    "id": "chasm",
+    "name": "Chasm Steps",
+    "subtitle": "Narrow ledges above the abyss.",
+    "tiles": [
+      "########",
+      "#......#",
+      "#..#...#",
+      "#..#.~.#",
+      "#......#",
+      "#.~..#.#",
+      "#....#.#",
+      "#..#...#",
+      "#..#.~.#",
+      "#......#",
+      "#.....E#",
+      "########"
+    ],
+    "enemies": [
+      { "kind": "chaser", "x": 4, "y": 4 },
+      { "kind": "turret", "x": 2, "y": 7 },
+      { "kind": "patroller", "x": 5, "y": 9 }
+    ]
+  },
+  {
+    "id": "irongate",
+    "name": "The Iron Gate",
+    "subtitle": "The first warden bars the forward path.",
+    "tiles": [
+      "###########",
+      "#.........#",
+      "#..#...#..#",
+      "#....~....#",
+      "#..#...#..#",
+      "#....~....#",
+      "#..#...#..#",
+      "#........E#",
+      "###########"
+    ],
+    "enemies": [
+      { "kind": "warden_elite", "x": 5, "y": 4 },
+      { "kind": "turret", "x": 8, "y": 3 }
+    ]
+  },
+  {
+    "id": "flooded",
+    "name": "Flooded Gallery",
+    "subtitle": "Stone bridges connect the sunken vaults.",
+    "tiles": [
+      "#############",
+      "#....#...#..#",
+      "#....#...#..#",
+      "#....#......#",
+      "#........#..#",
+      "#....#...#..#",
+      "#..~.#.~.#..#",
+      "#....#...#.E#",
+      "#############"
+    ],
+    "enemies": [
+      { "kind": "patroller", "x": 7, "y": 3 },
+      { "kind": "chaser", "x": 7, "y": 5 },
+      { "kind": "turret", "x": 10, "y": 2 }
+    ]
+  },
+  {
+    "id": "corridor",
+    "name": "The Long Corridor",
+    "subtitle": "Flanked by ancient walls and watching eyes.",
+    "tiles": [
+      "##############",
+      "#............#",
+      "#..########..#",
+      "#............#",
+      "#............#",
+      "#..########..#",
+      "#...........E#",
+      "##############"
+    ],
+    "enemies": [
+      { "kind": "chaser", "x": 5, "y": 3 },
+      { "kind": "turret", "x": 11, "y": 4 },
+      { "kind": "patroller", "x": 8, "y": 6 }
+    ]
+  },
+  {
     "id": "clockwork",
     "name": "Clockwork Hollow",
     "subtitle": "Learn the pattern. Break the cycle.",
@@ -86,9 +169,99 @@
     ]
   },
   {
+    "id": "colosseum",
+    "name": "The Grand Colosseum",
+    "subtitle": "Open ground offers no shelter.",
+    "tiles": [
+      "############",
+      "#..........#",
+      "#..........#",
+      "#...#..#...#",
+      "#..........#",
+      "#....~~....#",
+      "#....~~....#",
+      "#..........#",
+      "#...#..#...#",
+      "#..........#",
+      "#.........E#",
+      "############"
+    ],
+    "enemies": [
+      { "kind": "patroller", "x": 8, "y": 3 },
+      { "kind": "chaser", "x": 3, "y": 7 },
+      { "kind": "turret", "x": 9, "y": 8 },
+      { "kind": "chaser", "x": 8, "y": 9 }
+    ]
+  },
+  {
+    "id": "chronosmith",
+    "name": "Vault of the Chrono-Smith",
+    "subtitle": "The master builder guards the second threshold.",
+    "tiles": [
+      "###########",
+      "#.........#",
+      "#..~...~..#",
+      "#...#.#...#",
+      "#.........#",
+      "#...#.#...#",
+      "#..~...~..#",
+      "#.........#",
+      "#........E#",
+      "###########"
+    ],
+    "enemies": [
+      { "kind": "warden_elite", "x": 5, "y": 4 },
+      { "kind": "patroller", "x": 3, "y": 7 },
+      { "kind": "chaser", "x": 7, "y": 7 }
+    ]
+  },
+  {
+    "id": "fractured",
+    "name": "Fractured Causeway",
+    "subtitle": "Reality frays into the dark expanse.",
+    "tiles": [
+      "###########",
+      "#.........#",
+      "#.~~...~~.#",
+      "#..#...#..#",
+      "#.........#",
+      "#..#...#..#",
+      "#.~~...~~.#",
+      "#........E#",
+      "###########"
+    ],
+    "enemies": [
+      { "kind": "turret", "x": 5, "y": 4 },
+      { "kind": "chaser", "x": 8, "y": 3 },
+      { "kind": "patroller", "x": 7, "y": 6 }
+    ]
+  },
+  {
+    "id": "narthex",
+    "name": "The Whispering Narthex",
+    "subtitle": "Echoes of unlived futures reverberate.",
+    "tiles": [
+      "#############",
+      "#...........#",
+      "#..#..#..#..#",
+      "#...........#",
+      "#..~..~..~..#",
+      "#...........#",
+      "#..#..#..#..#",
+      "#..........E#",
+      "#############"
+    ],
+    "enemies": [
+      { "kind": "turret", "x": 6, "y": 3 },
+      { "kind": "chaser", "x": 8, "y": 5 },
+      { "kind": "patroller", "x": 4, "y": 5 },
+      { "kind": "chaser", "x": 10, "y": 6 }
+    ]
+  },
+  {
     "id": "heart",
     "name": "Heart of the Hourglass",
-    "subtitle": "One last room. A little more borrowed time.",
+    "subtitle": "The sands rush ever faster toward zero.",
     "tiles": [
       "##########",
       "#........#",
@@ -106,6 +279,54 @@
       { "kind": "chaser", "x": 7, "y": 5 },
       { "kind": "patroller", "x": 4, "y": 7 },
       { "kind": "chaser", "x": 7, "y": 7 }
+    ]
+  },
+  {
+    "id": "penultimate",
+    "name": "The Penultimate Gate",
+    "subtitle": "Beyond this door lies the heart of the cycle.",
+    "tiles": [
+      "############",
+      "#..........#",
+      "#..#....#..#",
+      "#....~~....#",
+      "#..#....#..#",
+      "#....~~....#",
+      "#..#....#..#",
+      "#....~~....#",
+      "#.........E#",
+      "############"
+    ],
+    "enemies": [
+      { "kind": "turret", "x": 5, "y": 2 },
+      { "kind": "patroller", "x": 7, "y": 4 },
+      { "kind": "chaser", "x": 4, "y": 6 },
+      { "kind": "chaser", "x": 8, "y": 7 }
+    ]
+  },
+  {
+    "id": "sanctum",
+    "name": "The Shattered Sanctum",
+    "subtitle": "Time bends. The final warden waits.",
+    "tiles": [
+      "##############",
+      "#............#",
+      "#..~......~..#",
+      "#...#....#...#",
+      "#............#",
+      "#.....~~.....#",
+      "#............#",
+      "#...#....#...#",
+      "#..~......~..#",
+      "#...........E#",
+      "##############"
+    ],
+    "enemies": [
+      { "kind": "warden_elite", "x": 6, "y": 5 },
+      { "kind": "turret", "x": 3, "y": 3 },
+      { "kind": "turret", "x": 10, "y": 3 },
+      { "kind": "chaser", "x": 4, "y": 8 },
+      { "kind": "patroller", "x": 9, "y": 8 }
     ]
   }
 ]

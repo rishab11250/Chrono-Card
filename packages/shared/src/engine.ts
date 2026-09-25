@@ -10,13 +10,20 @@ import type {
   Mode,
   Player,
   Position,
+  TurnOrder,
 } from './types';
 
 export const CARDS = Object.fromEntries(
   cardData.map((card) => [card.id, card]),
 ) as Record<CardId, Card>;
 export const ENEMIES = enemyData;
-export const LEVELS = levelData as Level[];
+export const LEVELS: Level[] = (
+  levelData as Omit<Level, 'width' | 'height'>[]
+).map((lvl) => ({
+  ...lvl,
+  width: lvl.tiles[0]?.length ?? 10,
+  height: lvl.tiles.length,
+}));
 export const DIRECTIONS: Position[] = [
   { x: 0, y: -1 },
   { x: 1, y: 0 },
@@ -91,6 +98,38 @@ function planEnemies(s: GameState) {
         if (tileAt(s, p) === '#') break;
         e.intent.attack.push(p);
       }
+    } else if (e.kind === 'warden_elite') {
+      if (e.hp > 2) {
+        // Cross attack: all 4 cardinal directions, up to 2 tiles
+        for (const d of DIRECTIONS) {
+          for (let n = 1; n <= 2; n++) {
+            const p = { x: e.x + d.x * n, y: e.y + d.y * n };
+            if (tileAt(s, p) === '#') break;
+            e.intent.attack.push(p);
+          }
+        }
+      } else {
+        // Enraged: all 8 adjacent tiles
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const p = { x: e.x + dx, y: e.y + dy };
+            if (tileAt(s, p) !== '#') e.intent.attack.push(p);
+          }
+      }
+      // Move toward nearest player if within range 4
+      const nearest = [...living].sort(
+        (a, b) => distance(e, a) - distance(e, b),
+      )[0];
+      if (nearest && distance(e, nearest) <= 4) {
+        const candidates = DIRECTIONS.map((d) => ({
+          x: e.x + d.x,
+          y: e.y + d.y,
+        })).sort((a, b) => distance(a, nearest) - distance(b, nearest));
+        e.intent.move = candidates.find(
+          (p) => tileAt(s, p) !== '#' && !enemyAt(s, p) && !livingAt(s, p),
+        );
+      }
     } else {
       e.intent.attack = DIRECTIONS.map((d) => ({
         x: e.x + d.x,
@@ -134,9 +173,10 @@ function loadLevel(s: GameState) {
     p.bonus = 0;
   });
   const spawnTiles: Position[] = [];
-  const tiles = LEVELS[s.level].tiles;
-  for (let y = 1; y < 9; y++) {
-    for (let x = 1; x < 9; x++) {
+  const level = LEVELS[s.level];
+  const tiles = level.tiles;
+  for (let y = 1; y < level.height - 1; y++) {
+    for (let x = 1; x < level.width - 1; x++) {
       if (
         tiles[y][x] === '.' &&
         (x > 2 || y > 2) &&
@@ -156,13 +196,11 @@ function loadLevel(s: GameState) {
     intent: { attack: [] },
   }));
   for (let i = 1; i < s.players.length; i++) {
-    const position =
-      available[LEVELS[s.level].enemies.length + i - 1] ??
-      [
-        { x: 8, y: 3 },
-        { x: 1, y: 6 },
-        { x: 5, y: 8 },
-      ][i - 1];
+    const position = available[LEVELS[s.level].enemies.length + i - 1] ??
+      spawnTiles[i % spawnTiles.length] ?? {
+        x: Math.min(8, level.width - 2),
+        y: Math.min(3, level.height - 2),
+      };
     s.enemies.push({
       ...position,
       id: `e${s.level}-extra${i}`,
@@ -185,6 +223,7 @@ export function createGame(
   mode: Mode,
   names: { id: string; name: string }[],
   seed = 42,
+  turnOrder: TurnOrder = 'alternating',
 ): GameState {
   if (
     names.length < 1 ||
@@ -198,6 +237,7 @@ export function createGame(
     throw new Error('Duo needs two explorers.');
   const state: GameState = {
     mode,
+    turnOrder,
     seed: seed >>> 0,
     rng: seed >>> 0,
     level: 0,
@@ -402,6 +442,41 @@ export function applyAction(
   s.revision++;
   return s;
 }
+export function resolveSimultaneousRound(
+  state: GameState,
+  actions: { playerId: string; action: GameAction }[],
+): GameState {
+  if (state.phase !== 'playing') throw new Error('This expedition has ended.');
+  const s = structuredClone(state);
+  for (const { playerId, action } of actions) {
+    const index = s.players.findIndex((p) => p.id === playerId);
+    if (index < 0 || s.players[index].hp <= 0) continue;
+    s.active = index;
+    if (action.type === 'play') {
+      try {
+        play(s, action.card, action.target);
+      } catch {
+        /* Illegal simultaneous candidate skipped gracefully */
+      }
+    }
+  }
+  enemyTurn(s);
+  s.players.forEach((p) => {
+    if (p.hp > 0) {
+      p.bonus = 0;
+      draw(s, p);
+    }
+  });
+  s.active = Math.max(
+    0,
+    s.players.findIndex((p) => p.hp > 0),
+  );
+  s.plays = 2 + (s.players[s.active]?.bonus ?? 0);
+  s.turns++;
+  checkOutcome(s);
+  s.revision++;
+  return s;
+}
 export function abandonPlayer(state: GameState, playerId: string): GameState {
   const s = structuredClone(state);
   const p = s.players.find((v) => v.id === playerId);
@@ -416,9 +491,10 @@ export function abandonPlayer(state: GameState, playerId: string): GameState {
 }
 export function legalTargets(s: GameState, card: number): Position[] {
   if (s.phase !== 'playing' || s.plays < 1) return [];
+  const level = LEVELS[s.level];
   const targets: Position[] = [];
-  for (let y = 0; y < 10; y++)
-    for (let x = 0; x < 10; x++) {
+  for (let y = 0; y < level.height; y++)
+    for (let x = 0; x < level.width; x++) {
       try {
         play(structuredClone(s), card, { x, y });
         targets.push({ x, y });

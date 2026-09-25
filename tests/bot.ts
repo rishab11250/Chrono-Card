@@ -33,15 +33,26 @@ function pathDistance(s: GameState, from: Position, target: Position) {
       }
     }
   }
-  return 30;
+  return 50;
 }
 function score(s: GameState) {
   if (s.phase === 'won') return 1_000_000;
   if (s.phase === 'lost') return -1_000_000;
   const p = activePlayer(s);
+  let exitPos = { x: 8, y: 8 };
+  const level = LEVELS[s.level];
+  if (level) {
+    for (let y = 0; y < level.height; y++) {
+      const x = level.tiles[y].indexOf('E');
+      if (x !== -1) {
+        exitPos = { x, y };
+        break;
+      }
+    }
+  }
   const dist = s.enemies.length
     ? Math.min(...s.enemies.map((e) => pathDistance(s, p, e)))
-    : pathDistance(s, p, { x: 8, y: 8 });
+    : pathDistance(s, p, exitPos);
   return (
     s.level * 10_000 -
     s.enemies.length * 300 +
@@ -58,6 +69,9 @@ function candidates(s: GameState): { state: GameState; action: GameAction }[] {
   if (s.plays < 1) return [];
   const p = activePlayer(s);
   const result: { state: GameState; action: GameAction }[] = [];
+  const lvl = LEVELS[s.level];
+  const maxW = lvl ? lvl.width - 1 : 9;
+  const maxH = lvl ? lvl.height - 1 : 9;
   p.hand.forEach((id, card) => {
     let targets: Position[];
     if (id === 'redraw' || id === 'shield') targets = [{ x: p.x, y: p.y }];
@@ -67,8 +81,8 @@ function candidates(s: GameState): { state: GameState; action: GameAction }[] {
       targets = s.players.filter((v) => v.id !== p.id && v.hp > 0);
     else {
       targets = [];
-      for (let y = 1; y < 9; y++)
-        for (let x = 1; x < 9; x++)
+      for (let y = 1; y < maxH; y++)
+        for (let x = 1; x < maxW; x++)
           if (
             (x === p.x || y === p.y) &&
             distance(p, { x, y }) <= CARDS[id].range

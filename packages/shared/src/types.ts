@@ -19,7 +19,7 @@ export type Card = {
   range: number;
   coop?: boolean;
 };
-export type EnemyKind = 'turret' | 'patroller' | 'chaser';
+export type EnemyKind = 'turret' | 'patroller' | 'chaser' | 'warden_elite';
 export type EnemyIntent = { attack: Position[]; move?: Position };
 export type Enemy = Position & {
   id: string;
@@ -34,6 +34,8 @@ export type Level = {
   subtitle: string;
   tiles: string[];
   enemies: { kind: EnemyKind; x: number; y: number }[];
+  width: number;
+  height: number;
 };
 export type Player = Position & {
   id: string;
@@ -47,9 +49,11 @@ export type Player = Position & {
   bonus: number;
   abandoned?: boolean;
 };
+export type TurnOrder = 'alternating' | 'simultaneous';
 export type Mode = 'solo' | 'duo' | 'party' | 'daily';
 export type GameState = {
   mode: Mode;
+  turnOrder?: TurnOrder;
   seed: number;
   rng: number;
   level: number;
@@ -65,10 +69,16 @@ export type GameState = {
 };
 export type GameAction =
   { type: 'play'; card: number; target?: Position } | { type: 'end' };
-export type Member = { id: string; name: string; connected: boolean };
+export type Member = {
+  id: string;
+  name: string;
+  connected: boolean;
+  cosmetic?: string;
+};
 export type RoomView = {
   code: string;
   mode: Mode;
+  turnOrder?: TurnOrder;
   host: string;
   members: Member[];
   game: GameState | null;
@@ -87,11 +97,16 @@ export type LeaderboardEntry = {
 };
 export interface ClientEvents {
   'room:create': (
-    input: { name: string; mode: 'duo' | 'party' | 'daily' },
+    input: {
+      name: string;
+      mode: 'duo' | 'party' | 'daily';
+      turnOrder?: TurnOrder;
+      cosmetic?: string;
+    },
     ack: (result: Reply<Session>) => void,
   ) => void;
   'room:join': (
-    input: { name: string; code: string },
+    input: { name: string; code: string; cosmetic?: string },
     ack: (result: Reply<Session>) => void,
   ) => void;
   'room:resume': (
@@ -105,8 +120,13 @@ export interface ClientEvents {
     input: { action: GameAction; revision: number },
     ack: (result: Reply) => void,
   ) => void;
+  'room:emote': (
+    input: { emote: string },
+    ack: (result: Reply) => void,
+  ) => void;
 }
 export interface ServerEvents {
   'room:state': (room: RoomView) => void;
   'room:closed': (reason: string) => void;
+  'room:emote': (data: { playerId: string; emote: string }) => void;
 }

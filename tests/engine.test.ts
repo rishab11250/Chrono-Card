@@ -9,6 +9,7 @@ import {
   ENEMIES,
   legalTargets,
   LEVELS,
+  resolveSimultaneousRound,
   same,
   type CardId,
   type Enemy,
@@ -46,13 +47,15 @@ function play(s: GameState, x?: number, y?: number) {
 }
 
 describe('content and deterministic turns', () => {
-  it('contains all ten cards, three patterns, and five connected 10x10 rooms', () => {
+  it('contains all cards, enemy kinds, and connected rooms with valid dimensions', () => {
     expect(Object.keys(CARDS)).toHaveLength(10);
-    expect(Object.keys(ENEMIES)).toHaveLength(3);
-    expect(LEVELS).toHaveLength(5);
+    expect(Object.keys(ENEMIES)).toHaveLength(4);
+    expect(LEVELS).toHaveLength(15);
     for (const level of LEVELS) {
-      expect(level.tiles).toHaveLength(10);
-      level.tiles.forEach((row) => expect(row).toHaveLength(10));
+      expect(level.width).toBeGreaterThanOrEqual(8);
+      expect(level.height).toBeGreaterThanOrEqual(8);
+      expect(level.tiles).toHaveLength(level.height);
+      level.tiles.forEach((row) => expect(row).toHaveLength(level.width));
       const visited = new Set(['1,1']);
       const queue = [{ x: 1, y: 1 }];
       for (const p of queue)
@@ -283,9 +286,16 @@ describe('enemy rounds and expedition outcomes', () => {
     const next = play(s, 8, 8);
     expect(next.level).toBe(1);
     expect(next.players[0]).toMatchObject({ x: 1, y: 1, hp: 7 });
-    expect(next.enemies.length).toBeGreaterThan(0);
-    s.level = 4;
-    const won = play(s, 8, 8);
+    s.level = LEVELS.length - 1;
+    const lastLevel = LEVELS[s.level];
+    let exitPos = { x: 8, y: 8 };
+    lastLevel.tiles.forEach((row, y) => {
+      const x = row.indexOf('E');
+      if (x !== -1) exitPos = { x, y };
+    });
+    s.players[0].x = exitPos.x - 1;
+    s.players[0].y = exitPos.y;
+    const won = play(s, exitPos.x, exitPos.y);
     expect(won.phase).toBe('won');
   });
   it('revives fallen allies but never players who abandoned the room', () => {
@@ -303,5 +313,61 @@ describe('enemy rounds and expedition outcomes', () => {
     const next = play(s, 8, 8);
     expect(next.players[1].hp).toBe(0);
     expect(next.players[2].hp).toBe(3);
+  });
+  it('resolves simultaneous turn order: players act before enemy round and can defeat enemy before it strikes', () => {
+    let s = createGame(
+      'duo',
+      [
+        { id: 'p1', name: 'Ada' },
+        { id: 'p2', name: 'Grace' },
+      ],
+      42,
+      'simultaneous',
+    );
+    expect(s.turnOrder).toBe('simultaneous');
+    s.enemies = [enemy(2, 1, 'turret')];
+    s.enemies[0].hp = 1;
+    s.enemies[0].intent.attack = [
+      { x: 1, y: 1 },
+      { x: 1, y: 2 },
+    ];
+    s.players[0].hand = ['strike'];
+    s.players[1].hand = ['step1'];
+    s.players[0].x = 1;
+    s.players[0].y = 1;
+    s.players[1].x = 1;
+    s.players[1].y = 2;
+
+    // Both players submit actions: p1 strikes enemy at (2,1), p2 steps to (2,2)
+    s = resolveSimultaneousRound(s, [
+      {
+        playerId: 'p1',
+        action: { type: 'play', card: 0, target: { x: 2, y: 1 } },
+      },
+      {
+        playerId: 'p2',
+        action: { type: 'play', card: 0, target: { x: 2, y: 2 } },
+      },
+    ]);
+
+    // Enemy defeated before it attacks
+    expect(s.enemies).toHaveLength(0);
+    expect(s.round).toBe(2);
+    expect(s.players[0].hp).toBe(12);
+    expect(s.players[1].hp).toBe(12);
+  });
+  it('supports rooms of varying dimensions without engine boundary errors', () => {
+    const s = solo();
+    for (const lvl of LEVELS) {
+      expect(lvl.width).toBe(lvl.tiles[0].length);
+      expect(lvl.height).toBe(lvl.tiles.length);
+    }
+    const targets = legalTargets(s, 0);
+    for (const t of targets) {
+      expect(t.x).toBeGreaterThanOrEqual(0);
+      expect(t.x).toBeLessThan(LEVELS[s.level].width);
+      expect(t.y).toBeGreaterThanOrEqual(0);
+      expect(t.y).toBeLessThan(LEVELS[s.level].height);
+    }
   });
 });

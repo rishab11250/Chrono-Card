@@ -16,5 +16,11 @@
     "hp": 2,
     "damage": 1,
     "description": "Steps toward the nearest explorer. Strikes adjacent tiles."
+  },
+  "warden_elite": {
+    "name": "Chrono Warden",
+    "hp": 4,
+    "damage": 2,
+    "description": "Telegraphs a wide cross attack. Enrages below half HP, striking all adjacent tiles."
   }
 }

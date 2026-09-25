@@ -6,6 +6,7 @@ import type {
   RoomView,
   ServerEvents,
   Session,
+  TurnOrder,
 } from '@chrono/shared';
 
 export const API_URL = import.meta.env.VITE_SERVER_URL || '';
@@ -17,6 +18,7 @@ export class Network {
   onRoom: (room: RoomView) => void = () => {};
   onStatus: (status: string) => void = () => {};
   onError: (error: string) => void = () => {};
+  onEmote: (data: { playerId: string; emote: string }) => void = () => {};
   constructor() {
     try {
       this.session = JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? 'null');
@@ -31,6 +33,7 @@ export class Network {
       timeout: 8000,
     });
     this.socket.on('room:state', (room) => this.onRoom(room));
+    this.socket.on('room:emote', (data) => this.onEmote(data));
     this.socket.on('room:closed', (error) => {
       this.clear();
       this.onError(error);
@@ -109,23 +112,28 @@ export class Network {
       this.socket.connect();
     });
   }
-  async create(name: string, mode: 'duo' | 'party' | 'daily') {
+  async create(
+    name: string,
+    mode: 'duo' | 'party' | 'daily',
+    turnOrder?: TurnOrder,
+    cosmetic?: string,
+  ) {
     await this.connect();
     this.save(
       this.unwrap(
         await this.socket
           .timeout(8000)
-          .emitWithAck('room:create', { name, mode }),
+          .emitWithAck('room:create', { name, mode, turnOrder, cosmetic }),
       ),
     );
   }
-  async join(name: string, code: string) {
+  async join(name: string, code: string, cosmetic?: string) {
     await this.connect();
     this.save(
       this.unwrap(
         await this.socket
           .timeout(8000)
-          .emitWithAck('room:join', { name, code }),
+          .emitWithAck('room:join', { name, code, cosmetic }),
       ),
     );
   }
@@ -145,6 +153,11 @@ export class Network {
       await this.socket
         .timeout(8000)
         .emitWithAck('game:action', { action, revision }),
+    );
+  }
+  async sendEmote(emote: string) {
+    this.unwrap(
+      await this.socket.timeout(8000).emitWithAck('room:emote', { emote }),
     );
   }
   async leave() {

@@ -3,6 +3,7 @@ import {
   activePlayer,
   applyAction,
   createGame,
+  LEVELS,
   type Mode,
 } from '@chrono/shared';
 import { chooseAction } from './bot';
@@ -12,7 +13,7 @@ it.each([
   { mode: 'duo', count: 2 },
   { mode: 'party', count: 4 },
 ] as { mode: Mode; count: number }[])(
-  'finishes all five rooms in $mode with ordinary legal card plays',
+  'finishes all rooms in $mode with ordinary legal card plays',
   ({ mode, count }) => {
     let state = createGame(
       mode,
@@ -23,7 +24,7 @@ it.each([
       20260924,
     );
     let actions = 0;
-    while (state.phase === 'playing' && actions < 1500) {
+    while (state.phase === 'playing' && actions < 4000) {
       state = applyAction(state, activePlayer(state).id, chooseAction(state));
       actions++;
     }
@@ -32,7 +33,7 @@ it.each([
       level: state.level,
       turns: state.turns,
       hp: state.players.map((p) => p.hp),
-    }).toMatchObject({ phase: 'won', level: 4 });
+    }).toMatchObject({ phase: 'won', level: LEVELS.length - 1 });
   },
   120_000,
 );

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { io, type Socket } from 'socket.io-client';
 import {
   activePlayer,
+  LEVELS,
   type ClientEvents,
   type RoomView,
   type ServerEvents,
@@ -268,7 +269,7 @@ describe('authoritative rooms', () => {
     expect(originalStart.game).toBeNull();
     await host.emitWithAck('room:start');
     let actions = 0;
-    while (actions < 1500) {
+    while (actions < 4000) {
       const state = app.rooms.get(session.code)!.game!;
       if (state.phase !== 'playing') break;
       const socket = players.get(activePlayer(state).id)!;
@@ -284,7 +285,7 @@ describe('authoritative rooms', () => {
       phase: state.phase,
       level: state.level,
       turns: state.turns,
-    }).toMatchObject({ phase: 'won', level: 4 });
+    }).toMatchObject({ phase: 'won', level: LEVELS.length - 1 });
     await expect.poll(() => states.get(spectator)?.game?.phase).toBe('won');
     for (const socket of players.values())
       expect(states.get(socket)?.game).toEqual(state);
@@ -294,7 +295,7 @@ describe('authoritative rooms', () => {
     const session = await create(host, 'daily');
     await host.emitWithAck('room:start');
     let actions = 0;
-    while (actions < 1500) {
+    while (actions < 4000) {
       const state = app.rooms.get(session.code)!.game!;
       if (state.phase !== 'playing') break;
       const result = await host.emitWithAck('game:action', {

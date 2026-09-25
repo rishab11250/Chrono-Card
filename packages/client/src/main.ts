@@ -24,6 +24,114 @@ type Board = {
 let boardInstance: Board | null = null;
 let boardLoading: Promise<Board> | null = null;
 
+interface Achievement {
+  id: string;
+  name: string;
+  description: string;
+  check: (game: GameState) => boolean;
+}
+
+const ACHIEVEMENTS: Achievement[] = [
+  {
+    id: 'speed_clear',
+    name: 'Chrono Rush',
+    description: 'Clear a room in under 10 turns.',
+    check: (g) =>
+      g.phase === 'playing' &&
+      g.turns < 10 &&
+      g.enemies.length === 0 &&
+      g.level > 0,
+  },
+  {
+    id: 'no_damage',
+    name: 'Untouchable',
+    description: 'Win without taking any damage.',
+    check: (g) => g.phase === 'won' && g.players.every((p) => p.hp === p.maxHp),
+  },
+  {
+    id: 'full_party',
+    name: 'Strength in Numbers',
+    description: 'Full party survives to the final room.',
+    check: (g) =>
+      g.level === LEVELS.length - 1 &&
+      g.players.length > 1 &&
+      g.players.every((p) => p.hp > 0),
+  },
+  {
+    id: 'daily_3',
+    name: 'Time Keeper',
+    description: 'Complete 3 daily challenges.',
+    check: () => false, // Tracked via counter, not single-state check
+  },
+];
+
+function loadAchievements(): Record<
+  string,
+  { unlocked: boolean; date?: string }
+> {
+  try {
+    return JSON.parse(localStorage.getItem('chrono-achievements') ?? '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveAchievement(id: string) {
+  const data = loadAchievements();
+  if (data[id]?.unlocked) return false;
+  data[id] = { unlocked: true, date: new Date().toISOString().slice(0, 10) };
+  try {
+    localStorage.setItem('chrono-achievements', JSON.stringify(data));
+  } catch {
+    /* Storage unavailable in private browsing */
+  }
+  return true;
+}
+
+function checkAchievements(g: GameState) {
+  for (const a of ACHIEVEMENTS) {
+    if (a.id === 'daily_3') continue; // handled separately
+    if (a.check(g) && saveAchievement(a.id)) {
+      toast(`🏆 Achievement unlocked: ${a.name}`);
+    }
+  }
+}
+
+function incrementDailyCount() {
+  try {
+    const count = Number(localStorage.getItem('chrono-daily-count') ?? '0') + 1;
+    localStorage.setItem('chrono-daily-count', String(count));
+    if (count >= 3) {
+      if (saveAchievement('daily_3')) {
+        toast('🏆 Achievement unlocked: Time Keeper');
+      }
+    }
+  } catch {
+    /* Storage unavailable */
+  }
+}
+
+function showAchievements() {
+  const data = loadAchievements();
+  const body = ACHIEVEMENTS.map((a) => {
+    const state = data[a.id];
+    return `<div class="achievement ${state?.unlocked ? 'unlocked' : ''}">
+      <span class="achievement-icon">${state?.unlocked ? '🏆' : '🔒'}</span>
+      <div>
+        <strong>${escape(a.name)}</strong>
+        <p>${escape(a.description)}</p>
+        ${state?.unlocked ? `<small>Unlocked ${state.date ?? ''}</small>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  showModal(
+    'Achievements',
+    `<div class="achievements-list">${body}</div><button id="ach-done" class="button primary">Close</button>`,
+    'YOUR LEGACY',
+  );
+  $('#ach-done').onclick = () => modal.close();
+}
+
 function loadBoard(): Promise<Board> {
   if (boardInstance) return Promise.resolve(boardInstance);
   if (!boardLoading) {
@@ -47,7 +155,9 @@ const escape = (value: string) =>
   );
 const hourglass = icon('boost');
 const net = new Network();
+const EMOTES = ['Ready!', 'Watch out!', 'Nice one!', 'Need backup!'] as const;
 let game: GameState;
+let prevState: GameState | null = null;
 let room: RoomView | null = null;
 let selected: number | null = null;
 let targets: Position[] = [];
@@ -72,34 +182,329 @@ try {
   game = createGame('solo', [{ id: 'local-1', name: 'You' }], seed());
 }
 
+const COSMETICS = [
+  {
+    id: 'default',
+    name: 'Explorer',
+    tint: 0xffffff,
+    req: 0,
+    desc: 'Classic field gear',
+  },
+  {
+    id: 'void',
+    name: 'Void Voyager',
+    tint: 0xcc99ff,
+    req: 1,
+    desc: 'Tuned to spatial anomalies',
+  },
+  {
+    id: 'solar',
+    name: 'Solar Warden',
+    tint: 0xffd275,
+    req: 2,
+    desc: 'Forged in stellar heat',
+  },
+  {
+    id: 'chrono',
+    name: 'Chrono Phantom',
+    tint: 0x78e6ff,
+    req: 3,
+    desc: 'Phase-shifted across timelines',
+  },
+];
+
+function getSelectedCosmetic(): string {
+  try {
+    return localStorage.getItem('chrono-skin') ?? 'default';
+  } catch {
+    return 'default';
+  }
+}
+
+function showCosmeticsModal() {
+  const current = getSelectedCosmetic();
+  const dailyWins = Number(localStorage.getItem('chrono-daily-count') ?? '0');
+  const body = `
+    <p>Unlock alternate explorer tints by completing daily challenges.</p>
+    <div class="skins-grid">
+      ${COSMETICS.map((skin) => {
+        const unlocked = dailyWins >= skin.req;
+        const active = current === skin.id;
+        return `
+          <div class="skin-card ${active ? 'active' : ''} ${unlocked ? 'unlocked' : 'locked'}">
+            <div class="skin-preview">
+              ${icon('explorer')}
+            </div>
+            <strong>${escape(skin.name)}</strong>
+            <p>${escape(skin.desc)}</p>
+            <small>${skin.req === 0 ? 'Default' : `${skin.req} Daily Challenge${skin.req > 1 ? 's' : ''}`}</small>
+            <button class="button small ${active ? 'subtle' : 'primary'} select-skin-btn" data-skin="${skin.id}" ${!unlocked || active ? 'disabled' : ''}>
+              ${active ? 'Equipped' : unlocked ? 'Equip' : 'Locked 🔒'}
+            </button>
+          </div>
+        `;
+      }).join('')}
+    </div>
+    <div class="dialog-actions">
+      <button id="close-skins-modal" class="button subtle">Close</button>
+    </div>
+  `;
+  showModal('Explorer Wardrobe', body, 'COSMETICS');
+  $('#close-skins-modal').onclick = () => modal.close();
+  document
+    .querySelectorAll<HTMLButtonElement>('.select-skin-btn')
+    .forEach((btn) => {
+      btn.onclick = () => {
+        const skinId = btn.dataset.skin;
+        if (skinId) {
+          localStorage.setItem('chrono-skin', skinId);
+          toast(`Equipped ${COSMETICS.find((s) => s.id === skinId)?.name}!`);
+          modal.close();
+          render();
+        }
+      };
+    });
+}
+
+interface SavedGhost {
+  id: string;
+  name: string;
+  seed: number;
+  actions: GameAction[];
+  turns: number;
+  won: boolean;
+  date: string;
+}
+
+let recordedActions: GameAction[] = [];
+let isGhostMode = false;
+let ghostReplayActions: GameAction[] = [];
+let ghostActionIndex = 0;
+let ghostPlaying = false;
+
+function loadGhosts(): SavedGhost[] {
+  try {
+    return JSON.parse(localStorage.getItem('chrono-ghosts-v1') ?? '[]');
+  } catch {
+    return [];
+  }
+}
+
+function saveGhostAlly(
+  name: string,
+  seed: number,
+  actions: GameAction[],
+  turns: number,
+  won: boolean,
+) {
+  const ghosts = loadGhosts();
+  const ghost: SavedGhost = {
+    id: `ghost-${Date.now()}`,
+    name,
+    seed,
+    actions,
+    turns,
+    won,
+    date: new Date().toISOString().slice(0, 10),
+  };
+  ghosts.unshift(ghost);
+  try {
+    localStorage.setItem(
+      'chrono-ghosts-v1',
+      JSON.stringify(ghosts.slice(0, 15)),
+    );
+  } catch {
+    /* Storage unavailable in private browsing */
+  }
+  void fetch(`${API_URL}/api/ghosts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: ghost.id,
+      seed: ghost.seed,
+      mode: 'solo',
+      actionsJson: JSON.stringify(ghost.actions),
+      name: ghost.name,
+      date: ghost.date,
+    }),
+  }).catch(() => {});
+}
+
+function showGhostModal() {
+  const ghosts = loadGhosts();
+  const defaultSample: SavedGhost = {
+    id: 'sample-ada',
+    name: "Ada's Echo",
+    seed: 42,
+    actions: [{ type: 'play', card: 0 }, { type: 'end' }],
+    turns: 12,
+    won: true,
+    date: 'Sample',
+  };
+  const list = ghosts.length ? ghosts : [defaultSample];
+  const body = `
+    <p>Summon a recorded solo run as your co-op partner. The ghost replays its moves turn-by-turn while you play live!</p>
+    <div class="ghosts-list">
+      ${list
+        .map(
+          (g, i) => `
+        <div class="ghost-item">
+          <div class="ghost-info">
+            <strong>${escape(g.name)}</strong>
+            <span>${g.won ? 'Escaped' : 'Fell'} in ${g.turns} turns · ${escape(g.date)}</span>
+          </div>
+          <button class="button small primary play-ghost-btn" data-index="${i}">Summon 👻</button>
+        </div>
+      `,
+        )
+        .join('')}
+    </div>
+    <div class="dialog-actions">
+      <button id="close-ghost-modal" class="button subtle">Close</button>
+    </div>
+  `;
+  showModal('Ghost Ally Expedition', body, 'COGNITIVE ECHO');
+  $('#close-ghost-modal').onclick = () => modal.close();
+  document
+    .querySelectorAll<HTMLButtonElement>('.play-ghost-btn')
+    .forEach((btn) => {
+      btn.onclick = () => {
+        const idx = Number(btn.dataset.index);
+        const chosen = list[idx];
+        if (!chosen) return;
+        modal.close();
+        void startGhostRun(chosen);
+      };
+    });
+}
+
+async function startGhostRun(ghost: SavedGhost) {
+  if (!(await confirmLeave())) return;
+  try {
+    await net.leave();
+  } catch {
+    net.clear();
+    net.socket.disconnect();
+  }
+  room = null;
+  connection = 'Ghost ally co-op';
+  isGhostMode = true;
+  ghostReplayActions = [...ghost.actions];
+  ghostActionIndex = 0;
+  game = createGame(
+    'duo',
+    [
+      { id: 'local-1', name: 'You' },
+      { id: 'ghost-1', name: `${ghost.name} (Ghost)` },
+    ],
+    ghost.seed,
+  );
+  selected = null;
+  targets = [];
+  saveLocal();
+  render();
+}
+
 $('#app').innerHTML = `
   <aside class="sidebar">
     <a class="brand" href="/" aria-label="Chrono Card home"><span class="brand-mark">${hourglass}</span><span>CHRONO<span class="brand-second">CARD<span class="brand-dot">.</span></span></span></a>
-    <div class="sidebar-label">THE EXPEDITION</div>
-    <nav aria-label="Game modes">
-      <button class="nav-item" data-mode="solo" aria-label="Solo adventure"><span class="nav-symbol">${icon('explorer')}</span>Solo adventure<span class="nav-tail">↗</span></button>
-      <button class="nav-item" data-mode="duo" aria-label="Couch co-op"><span class="nav-symbol">${icon('duo')}</span>Couch co-op<span class="nav-tail">2</span></button>
-      <button class="nav-item" data-mode="online"><span class="nav-symbol">${icon('shield')}</span>Play with friends<span class="nav-tail">↗</span></button>
-      <button class="nav-item" data-mode="daily"><span class="nav-symbol">${icon('boost')}</span>Daily challenge<span class="tiny-dot"></span></button>
+    <nav class="mode-nav" aria-label="Game modes">
+      <button class="nav-item" data-mode="solo" aria-label="Solo adventure"><span class="nav-symbol">${icon('explorer')}</span><span>Solo</span></button>
+      <button class="nav-item" data-mode="duo" aria-label="Couch co-op"><span class="nav-symbol">${icon('duo')}</span><span>Co-op</span></button>
+      <button class="nav-item" data-mode="ghost" aria-label="Ghost ally"><span class="nav-symbol">${icon('swap')}</span><span>Ghost</span></button>
+      <button class="nav-item" data-mode="online" aria-label="Play with friends"><span class="nav-symbol">${icon('shield')}</span><span>Online</span></button>
+      <button class="nav-item" data-mode="daily" aria-label="Daily challenge"><span class="nav-symbol">${icon('boost')}</span><span>Daily</span><span class="tiny-dot"></span></button>
     </nav>
-    <div class="sidebar-note"><span class="note-star">✧</span><p>A little strategy.<br>A little borrowed time.</p><div class="note-line"></div><small>No reflexes required.<br>Make every card count.</small></div>
-    <div class="sidebar-bottom"><button id="help-button" class="quiet-button">ⓘ &nbsp; How to play <kbd>?</kbd></button><button id="sound-button" class="quiet-button" aria-pressed="false">♫ &nbsp; Sound off</button><div class="version"><span class="tiny-dot"></span> BUILT FOR THE NEXT MOVE <span>V1.0</span></div></div>
+    <div class="sidebar-right">
+      <span id="connection" class="connection">Local expedition</span>
+      <button id="new-run" class="button subtle small new-run-btn" title="Start a fresh run">↻ <span>New run</span></button>
+      <div class="sidebar-bottom">
+        <button id="achievements-button" class="tool-btn" title="Achievements" aria-label="Achievements">🏆</button>
+        <button id="cosmetics-button" class="tool-btn" title="Explorer skins" aria-label="Explorer skins">🎨</button>
+        <button id="help-button" class="tool-btn" title="How to play (?)" aria-label="How to play"><kbd>?</kbd></button>
+        <button id="sound-button" class="tool-btn" aria-pressed="false" title="Sound: Off (Click to toggle)" aria-label="Toggle sound">🔇</button>
+      </div>
+    </div>
   </aside>
   <main>
-    <header class="topbar"><div class="breadcrumb">ADVENTURE <span>►</span> <strong id="mode-label">SOLO ADVENTURE</strong></div><div class="top-actions"><span id="connection" class="connection">Local expedition</span><button id="mobile-help" class="button subtle small" aria-label="Game instructions">?</button><button id="new-run" class="button subtle small">↻ <span>New expedition</span></button></div></header>
+    <div class="topbar-shim" style="display:none;"><strong id="mode-label">SOLO ADVENTURE</strong><button id="mobile-help">?</button></div>
     <div class="workspace">
-      <section class="room-heading"><div><div class="eyebrow" id="chapter-label">CHAPTER 01 / 05</div><h1 id="room-name">The Threshold</h1><p id="room-subtitle">Every escape begins with a single step.</p></div><div class="room-progress" id="room-progress" aria-label="Dungeon progress"></div></section>
+      <section class="room-heading"><div><div class="eyebrow" id="chapter-label">CHAPTER 01 / 06</div><h1 id="room-name">The Threshold</h1><p id="room-subtitle">Every escape begins with a single step.</p></div><div class="room-progress" id="room-progress" aria-label="Dungeon progress"></div></section>
       <div class="play-layout">
         <section class="dungeon-panel" aria-label="Dungeon board"><div class="board-toolbar"><span><i class="live-dot"></i><strong id="turn-label">YOUR TURN</strong></span><span id="round-label">ROUND 01</span></div><div class="board-wrap"><div id="phaser-board"></div><div id="accessible-grid" class="accessible-grid" role="group" aria-label="Dungeon tiles. Select a card, then a tile. Arrow keys move focus; Enter selects."></div><div id="outcome" class="outcome" hidden></div></div><div class="board-legend"><span><i class="legend-player"></i> Explorer</span><span><i class="legend-danger"></i> Next attack</span><span><i class="legend-exit"></i> Exit</span><span class="legend-hint">PLAN. PLAY. REPEAT.</span></div></section>
-        <aside class="run-panel"><section class="party-section"><div class="section-heading"><h2>YOUR PARTY</h2><span id="party-count">01</span></div><div id="party"></div></section><section class="enemy-section"><div class="section-heading"><h2>IN THE SHADOWS</h2><span id="enemy-count">02</span></div><div id="enemies"></div></section><section class="log-section"><div class="section-heading"><h2>FIELD NOTES</h2><span>↙</span></div><ol id="field-notes"></ol></section><div class="exit-note" id="exit-note"><span>▥</span><p>Clear the room.<br><strong>Find your way out.</strong></p></div></aside>
+        <aside class="run-panel"><section class="party-section"><div class="section-heading"><h2>YOUR PARTY</h2><span id="party-count">01</span></div><div id="party"></div></section><section class="enemy-section"><div class="section-heading"><h2>IN THE SHADOWS</h2><span id="enemy-count">02</span></div><div id="enemies"></div></section><section class="log-section"><div class="section-heading"><h2>FIELD NOTES</h2><span>↙</span></div><ol id="field-notes"></ol></section><div class="exit-note" id="exit-note"><span>▥</span><p>Clear the room.<br><strong>Find your way out.</strong></p></div><div class="emote-bar" id="emote-bar" hidden>${EMOTES.map((e) => `<button class="emote-btn" data-emote="${escape(e)}">${escape(e)}</button>`).join('')}</div></aside>
       </div>
       <section class="hand-section" aria-label="Your cards"><div class="hand-heading"><div><h2 id="hand-title">Your next move<span id="plays-badge">2 plays left</span></h2><p id="selection-hint">Choose a card, then a highlighted tile.</p></div><button id="end-turn" class="button primary">End turn <span>↗</span></button></div><div id="hand" class="hand"></div></section>
       <footer class="game-footer"><span>THE DUNGEON MOVES ONLY WHEN YOU DO.</span><span><kbd>1</kbd>–<kbd>5</kbd> select card <span class="footer-separator">/</span> <kbd>Esc</kbd> cancel <span class="footer-separator">/</span> <kbd>E</kbd> end turn</span></footer>
     </div>
   </main>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <div id="drag-ghost" class="drag-ghost" style="display:none;"></div>
   <dialog id="modal" aria-labelledby="modal-title"><div id="modal-content"></div></dialog>
 `;
+
+const liveRegion = document.createElement('div');
+liveRegion.setAttribute('aria-live', 'polite');
+liveRegion.setAttribute('role', 'log');
+liveRegion.style.cssText =
+  'position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap';
+document.body.appendChild(liveRegion);
+
+document
+  .querySelectorAll<HTMLButtonElement>('#emote-bar .emote-btn')
+  .forEach((btn) => {
+    btn.onclick = () => {
+      const emote = btn.dataset.emote;
+      if (emote) net.sendEmote(emote);
+    };
+  });
+
+function announce(prev: GameState | null, next: GameState) {
+  if (prev && prev.revision === next.revision) return;
+  const messages: string[] = [];
+  const ap = activePlayer(next);
+
+  if (!prev) {
+    messages.push(`Entered ${LEVELS[next.level].name}. ${ap.name}'s turn.`);
+  } else {
+    // Level change
+    if (prev.level !== next.level) {
+      messages.push(`Entered ${LEVELS[next.level].name}.`);
+    }
+    // Card played (check log for the latest played card message)
+    const newLogs = next.log.filter((l) => !prev.log.includes(l));
+    for (const log of newLogs) messages.push(log);
+
+    // Turn change
+    if (prev.active !== next.active && next.phase === 'playing') {
+      messages.push(`${ap.name}'s turn. Round ${next.round}.`);
+    }
+    // Round change
+    if (prev.round !== next.round && prev.active === next.active) {
+      messages.push(`Round ${next.round}.`);
+    }
+    // Win/loss
+    if (next.phase === 'won' && prev.phase !== 'won') {
+      messages.push(`Victory! Escaped in ${next.turns} turns.`);
+    }
+    if (next.phase === 'lost' && prev.phase !== 'lost') {
+      messages.push('Defeat. The expedition has ended.');
+    }
+    // Room cleared
+    if (
+      prev.enemies.length > 0 &&
+      next.enemies.length === 0 &&
+      next.phase === 'playing'
+    ) {
+      messages.push('All enemies defeated. The exit is open.');
+    }
+  }
+
+  if (messages.length) {
+    liveRegion.textContent = messages.join(' ');
+  }
+}
+
 const modal = $<HTMLDialogElement>('#modal');
 let toastTimer: number;
 function toast(message: string) {
@@ -186,6 +591,7 @@ function canPlay() {
   return (
     !busy &&
     game.phase === 'playing' &&
+    (!isGhostMode || activePlayer(game).id !== 'ghost-1') &&
     (!room ||
       (net.socket.connected &&
         !room.paused &&
@@ -217,6 +623,9 @@ async function act(action: GameAction) {
   try {
     if (room) await net.action(action, game.revision);
     else {
+      if (game.mode === 'solo' && !isGhostMode) {
+        recordedActions.push(action);
+      }
       game = applyAction(game, activePlayer(game).id, action);
       saveLocal();
     }
@@ -232,6 +641,81 @@ async function act(action: GameAction) {
     render();
   }
 }
+
+let dragState = {
+  active: false,
+  cardIndex: -1,
+  startX: 0,
+  startY: 0,
+  moved: false,
+};
+
+function startCardDrag(e: PointerEvent, index: number) {
+  if (!canPlay() || game.plays < 1) return;
+  selectCard(index);
+  dragState = {
+    active: true,
+    cardIndex: index,
+    startX: e.clientX,
+    startY: e.clientY,
+    moved: false,
+  };
+}
+
+window.addEventListener('pointermove', (e) => {
+  if (!dragState.active) return;
+  if (
+    !dragState.moved &&
+    Math.hypot(e.clientX - dragState.startX, e.clientY - dragState.startY) > 8
+  ) {
+    dragState.moved = true;
+  }
+  if (dragState.moved) {
+    const cardId = activePlayer(game).hand[dragState.cardIndex];
+    const ghost = $('#drag-ghost');
+    if (ghost && cardId) {
+      const card = CARDS[cardId];
+      ghost.innerHTML = `<span class="ghost-card-pill ${card.category}"><span>${icon(cardId)}</span> <strong>${card.name}</strong></span>`;
+      ghost.style.display = 'block';
+      ghost.style.left = `${e.clientX}px`;
+      ghost.style.top = `${e.clientY - 24}px`;
+    }
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const cell = el?.closest('.grid-cell') as HTMLElement | null;
+    document
+      .querySelectorAll('.grid-cell.drag-hover')
+      .forEach((c) => c.classList.remove('drag-hover'));
+    if (cell) {
+      const x = Number(cell.dataset.x);
+      const y = Number(cell.dataset.y);
+      if (targets.some((t) => same(t, { x, y }))) {
+        cell.classList.add('drag-hover');
+      }
+    }
+  }
+});
+
+window.addEventListener('pointerup', (e) => {
+  if (!dragState.active) return;
+  const ghost = $('#drag-ghost');
+  if (ghost) ghost.style.display = 'none';
+  document
+    .querySelectorAll('.grid-cell.drag-hover')
+    .forEach((c) => c.classList.remove('drag-hover'));
+  if (dragState.moved) {
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const cell = el?.closest('.grid-cell') as HTMLElement | null;
+    if (cell) {
+      const x = Number(cell.dataset.x);
+      const y = Number(cell.dataset.y);
+      if (targets.some((t) => same(t, { x, y })) && canPlay()) {
+        void act({ type: 'play', card: dragState.cardIndex, target: { x, y } });
+      }
+    }
+  }
+  dragState.active = false;
+});
+
 function selectCard(index: number) {
   if (!canPlay() || game.plays < 1) return;
   if (selected === index) {
@@ -262,37 +746,56 @@ function tileLabel(x: number, y: number) {
   return `Column ${x + 1}, row ${y + 1}: ${player ? `${player.name}, ${player.hp} HP` : enemy ? `${ENEMIES[enemy.kind].name}, ${enemy.hp} HP` : tile === '#' ? 'wall' : tile === '~' ? 'hazard, 1 damage' : tile === 'E' ? `exit ${game.enemies.length ? 'locked' : 'open'}` : 'floor'}${game.enemies.some((e) => e.intent.attack.some((p) => same(p, position))) ? ', enemy will attack here' : ''}${targets.some((p) => same(p, position)) ? ', valid target' : ''}`;
 }
 const grid = $('#accessible-grid');
-for (let y = 0; y < 10; y++)
-  for (let x = 0; x < 10; x++) {
-    const cell = document.createElement('button');
-    cell.className = 'grid-cell';
-    cell.dataset.x = `${x}`;
-    cell.dataset.y = `${y}`;
-    cell.tabIndex = x === 1 && y === 1 ? 0 : -1;
-    cell.addEventListener('click', () => {
-      if (selected !== null && canPlay())
-        void act({ type: 'play', card: selected, target: { x, y } });
-      else toast(tileLabel(x, y));
-    });
-    grid.append(cell);
+let currentGridLevel = -1;
+
+function updateAccessibleGrid(levelIndex: number) {
+  if (currentGridLevel === levelIndex) return;
+  currentGridLevel = levelIndex;
+  const level = LEVELS[levelIndex];
+  grid.innerHTML = '';
+  grid.style.gridTemplateColumns = `repeat(${level.width}, 1fr)`;
+  grid.style.gridTemplateRows = `repeat(${level.height}, 1fr)`;
+  for (let y = 0; y < level.height; y++) {
+    for (let x = 0; x < level.width; x++) {
+      const cell = document.createElement('button');
+      cell.className = 'grid-cell';
+      cell.dataset.x = `${x}`;
+      cell.dataset.y = `${y}`;
+      cell.tabIndex = x === 1 && y === 1 ? 0 : -1;
+      cell.addEventListener('click', () => {
+        if (selected !== null && canPlay())
+          void act({ type: 'play', card: selected, target: { x, y } });
+        else toast(tileLabel(x, y));
+      });
+      grid.append(cell);
+    }
   }
+}
+
 grid.addEventListener('keydown', (event) => {
+  const level = LEVELS[game.level];
   const deltas: Record<string, number> = {
     ArrowLeft: -1,
     ArrowRight: 1,
-    ArrowUp: -10,
-    ArrowDown: 10,
+    ArrowUp: -level.width,
+    ArrowDown: level.width,
   };
   if (!(event.key in deltas)) return;
   event.preventDefault();
   const cells = [...grid.children] as HTMLButtonElement[];
   const current = cells.indexOf(document.activeElement as HTMLButtonElement);
-  const next = Math.max(0, Math.min(99, current + deltas[event.key]));
-  cells[current].tabIndex = -1;
-  cells[next].tabIndex = 0;
-  cells[next].focus();
+  const next = Math.max(
+    0,
+    Math.min(cells.length - 1, current + deltas[event.key]),
+  );
+  if (cells[current]) cells[current].tabIndex = -1;
+  if (cells[next]) {
+    cells[next].tabIndex = 0;
+    cells[next].focus();
+  }
 });
 function render() {
+  updateAccessibleGrid(game.level);
   const p = activePlayer(game);
   const level = LEVELS[game.level];
   const playable = canPlay();
@@ -300,23 +803,68 @@ function render() {
     ? room.mode === 'daily'
       ? 'DAILY CHALLENGE'
       : `ONLINE ${room.mode === 'duo' ? 'DUO' : 'PARTY'} · ${room.code}`
-    : game.mode === 'duo'
-      ? 'COUCH CO-OP'
-      : 'SOLO ADVENTURE';
+    : isGhostMode
+      ? 'GHOST ALLY CO-OP'
+      : game.mode === 'duo'
+        ? 'COUCH CO-OP'
+        : 'SOLO ADVENTURE';
   $('#mode-label').textContent = modeText;
-  $('#connection').textContent = room ? connection : 'Local expedition';
+  $('#connection').textContent = room
+    ? room.code
+      ? `${room.mode.toUpperCase()} · ${room.code}`
+      : connection
+    : isGhostMode
+      ? 'Ghost ally run'
+      : 'Local expedition';
   $('#chapter-label').textContent =
-    `CHAPTER ${String(game.level + 1).padStart(2, '0')} / 05`;
+    `CHAPTER ${String(game.level + 1).padStart(2, '0')} / ${String(LEVELS.length).padStart(2, '0')}`;
   $('#room-name').textContent = level.name;
   $('#room-subtitle').textContent = level.subtitle;
-  $('#room-progress').innerHTML = LEVELS.map(
-    (l, i) =>
-      `<span class="progress-step ${i < game.level ? 'complete' : i === game.level ? 'current' : ''}" title="${escape(l.name)}">${i < game.level ? '✓' : String(i + 1).padStart(2, '0')}</span>${i < 4 ? '<i></i>' : ''}`,
-  ).join('');
+  const acts: { name: string; start: number; end: number }[] = [];
+  const actCount = Math.max(1, Math.ceil(LEVELS.length / 5));
+  for (let a = 0; a < actCount; a++) {
+    const start = a * 5;
+    const end = Math.min(LEVELS.length - 1, (a + 1) * 5 - 1);
+    if (start < LEVELS.length) {
+      const roman =
+        ['ACT I', 'ACT II', 'ACT III', 'ACT IV'][a] ?? `ACT ${a + 1}`;
+      acts.push({ name: roman, start, end });
+    }
+  }
+  $('#room-progress').innerHTML = acts
+    .map((act) => {
+      const steps = LEVELS.slice(act.start, act.end + 1)
+        .map((l, idx) => {
+          const i = act.start + idx;
+          const isBoss = (i + 1) % 5 === 0 && i < LEVELS.length - 1;
+          const isFinalBoss = i === LEVELS.length - 1;
+          const bossIcon = isFinalBoss ? '👑' : isBoss ? '⚔' : '';
+          const label =
+            i < game.level ? '✓' : bossIcon || String(i + 1).padStart(2, '0');
+          const classes = [
+            'progress-step',
+            i < game.level ? 'complete' : i === game.level ? 'current' : '',
+            bossIcon ? 'boss-step' : '',
+            isFinalBoss ? 'final-boss-step' : '',
+          ]
+            .filter(Boolean)
+            .join(' ');
+          return `<span class="${classes}" title="${escape(l.name)}${bossIcon ? ' (Boss)' : ''}">${label}</span>`;
+        })
+        .join('');
+      return `<div class="act-track"><span class="act-tag">${act.name}</span><div class="act-steps">${steps}</div></div>`;
+    })
+    .join('<span class="act-separator">▸</span>');
   document.querySelectorAll<HTMLElement>('[data-mode]').forEach((el) => {
     const current =
       el.dataset.mode ===
-      (room ? (room.mode === 'daily' ? 'daily' : 'online') : game.mode);
+      (room
+        ? room.mode === 'daily'
+          ? 'daily'
+          : 'online'
+        : isGhostMode
+          ? 'ghost'
+          : game.mode);
     el.classList.toggle('active', current);
     el.setAttribute('aria-current', current ? 'page' : 'false');
   });
@@ -390,11 +938,14 @@ function render() {
     .join('');
   document
     .querySelectorAll<HTMLButtonElement>('[data-card]')
-    .forEach((button) =>
+    .forEach((button) => {
       button.addEventListener('click', () =>
         selectCard(Number(button.dataset.card)),
-      ),
-    );
+      );
+      button.addEventListener('pointerdown', (e) =>
+        startCardDrag(e, Number(button.dataset.card)),
+      );
+    });
   for (const cell of grid.children as HTMLCollectionOf<HTMLButtonElement>) {
     const x = Number(cell.dataset.x);
     const y = Number(cell.dataset.y);
@@ -409,6 +960,7 @@ function render() {
     (!room &&
       (new URLSearchParams(location.search).has('room') ||
         new URLSearchParams(location.search).has('watch')));
+  $('#emote-bar').hidden = !room;
   if (boardInstance) {
     boardInstance.update(game, targets);
   } else if (!inLobby) {
@@ -416,10 +968,69 @@ function render() {
   }
   $('#outcome').hidden = game.phase === 'playing';
   if (game.phase !== 'playing') {
+    const canSaveGhost =
+      !isGhostMode && game.mode === 'solo' && recordedActions.length > 0;
     $('#outcome').innerHTML =
-      `<div class="outcome-card"><span>${game.phase === 'won' ? '✧' : '⌛'}</span><div class="eyebrow">${game.phase === 'won' ? 'THE CYCLE IS BROKEN' : 'EVERY END IS A BEGINNING'}</div><h2>${game.phase === 'won' ? 'Time is yours.' : 'Out of time.'}</h2><p>${game.phase === 'won' ? `Five rooms. ${game.turns} turns. One well-earned escape.` : `You reached room ${game.level + 1}. A new hand awaits.`}</p><button id="play-again" class="button primary">Another expedition ↗</button>${room?.mode === 'daily' && game.phase === 'won' ? '<p>Your score is on today’s leaderboard.</p>' : ''}</div>`;
+      `<div class="outcome-card"><span>${game.phase === 'won' ? '✧' : '⌛'}</span><div class="eyebrow">${game.phase === 'won' ? 'THE CYCLE IS BROKEN' : 'EVERY END IS A BEGINNING'}</div><h2>${game.phase === 'won' ? 'Time is yours.' : 'Out of time.'}</h2><p>${game.phase === 'won' ? `${LEVELS.length} rooms. ${game.turns} turns. One well-earned escape.` : `You reached room ${game.level + 1}. A new hand awaits.`}</p><button id="play-again" class="button primary">Another expedition ↗</button>${canSaveGhost ? `<div class="ghost-save-box"><p>Save this run as a Ghost ally?</p><div class="ghost-save-row"><input id="ghost-name-input" maxlength="20" placeholder="Ghost name" value="Past Explorer" /><button id="save-ghost-btn" class="button subtle small">Save Ghost 👻</button></div></div>` : ''}${room?.mode === 'daily' && game.phase === 'won' ? '<p>Your score is on today’s leaderboard.</p>' : ''}</div>`;
     $('#play-again').addEventListener('click', () => void newLocal('solo'));
+    $('#save-ghost-btn')?.addEventListener('click', () => {
+      const nameInput = $('#ghost-name-input') as HTMLInputElement;
+      const ghostName = nameInput?.value.trim() || 'Explorer Ghost';
+      saveGhostAlly(
+        ghostName,
+        game.seed,
+        [...recordedActions],
+        game.turns,
+        game.phase === 'won',
+      );
+      toast(
+        `Ghost "${ghostName}" saved! Choose "Ghost ally" in the sidebar to play alongside it.`,
+      );
+      const box = $('.ghost-save-box');
+      if (box)
+        box.innerHTML = `<p class="ghost-saved-msg">✓ Saved as "${escape(ghostName)}". Ready to summon in Ghost mode!</p>`;
+    });
   }
+
+  if (
+    isGhostMode &&
+    game.phase === 'playing' &&
+    activePlayer(game).id === 'ghost-1' &&
+    !ghostPlaying
+  ) {
+    ghostPlaying = true;
+    window.setTimeout(() => {
+      if (
+        !isGhostMode ||
+        game.phase !== 'playing' ||
+        activePlayer(game).id !== 'ghost-1'
+      ) {
+        ghostPlaying = false;
+        return;
+      }
+      let action = ghostReplayActions[ghostActionIndex++];
+      if (!action) action = { type: 'end' };
+      try {
+        game = applyAction(game, 'ghost-1', action);
+        beep('support');
+      } catch {
+        try {
+          game = applyAction(game, 'ghost-1', { type: 'end' });
+        } catch {
+          /* Turn end fallback */
+        }
+      } finally {
+        ghostPlaying = false;
+        render();
+      }
+    }, 350);
+  }
+
+  if (game) {
+    checkAchievements(game);
+  }
+  announce(prevState, game);
+  prevState = game;
 }
 function showModal(
   title: string,
@@ -486,6 +1097,8 @@ async function newLocal(mode: 'solo' | 'duo') {
   }
   room = null;
   connection = 'Local expedition';
+  isGhostMode = false;
+  recordedActions = [];
   game = createGame(
     mode,
     mode === 'duo'
@@ -522,7 +1135,7 @@ function lobby() {
   const host = net.session?.playerId === room.host;
   showModal(
     'Better together.',
-    `<p>${room.mode === 'daily' ? 'The same dungeon and deck seed for everyone today. Finish the run to record your score.' : 'Share your code. Gather your party. Make it out together.'}</p><div class="room-code"><span>ROOM CODE</span><strong>${room.code}</strong><button id="copy-invite" class="text-button">Copy invite link ↗</button></div><div class="lobby-members">${room.members.map((m, i) => `<div><span class="member-number">0${i + 1}</span><strong>${escape(m.name)}</strong><span>${m.connected ? (m.id === room!.host ? 'HOST · READY' : 'READY') : 'RECONNECTING'}</span></div>`).join('')}${room.mode !== 'daily' && room.members.length < (room.mode === 'duo' ? 2 : 4) ? '<div class="waiting-slot">+ Waiting for another explorer…</div>' : ''}</div><p id="form-error" class="form-error" role="alert"></p><div class="dialog-actions"><button id="leave-lobby" class="button subtle">Leave room</button><button id="start-room" class="button primary" data-network ${!host || room.members.some((m) => !m.connected) || (room.mode !== 'daily' && room.members.length < 2) ? 'disabled' : ''}>${host ? 'Begin expedition ↗' : 'Waiting for host…'}</button></div><button id="spectator-link" class="text-button">Copy spectator link</button>`,
+    `<p>${room.mode === 'daily' ? 'The same dungeon and deck seed for everyone today. Finish the run to record your score.' : 'Share your code. Gather your party. Make it out together.'}</p><div class="room-code"><span>ROOM CODE</span><strong>${room.code}</strong><button id="copy-invite" class="text-button">Copy invite link ↗</button></div><div class="lobby-members">${room.members.map((m, i) => `<div><span class="member-number">0${i + 1}</span><strong>${escape(m.name)}</strong><span>${m.connected ? (m.id === room!.host ? 'HOST · READY' : 'READY') : 'RECONNECTING'}</span></div>`).join('')}${room.mode !== 'daily' && room.members.length < (room.mode === 'duo' ? 2 : 4) ? '<div class="waiting-slot">+ Waiting for another explorer…</div>' : ''}</div><p id="form-error" class="form-error" role="alert"></p><div class="dialog-actions"><button id="leave-lobby" class="button subtle">Leave room</button><button id="start-room" class="button primary" data-network ${!host || room.members.some((m) => !m.connected) || (room.mode !== 'daily' && room.members.length < 2) ? 'disabled' : ''}>${host ? 'Begin expedition ↗' : 'Waiting for host…'}</button><div class="emote-bar">${EMOTES.map((e) => `<button class="emote-btn" data-emote="${escape(e)}">${escape(e)}</button>`).join('')}</div></div><button id="spectator-link" class="text-button">Copy spectator link</button>`,
     room.mode === 'daily' ? 'DAILY CHALLENGE · UTC' : 'ONLINE EXPEDITION',
   );
   $('#copy-invite').onclick = () => void copyLink(false);
@@ -538,6 +1151,12 @@ function lobby() {
     void safe(async () => {
       await net.start();
     });
+  document.querySelectorAll<HTMLButtonElement>('.emote-btn').forEach((btn) => {
+    btn.onclick = () => {
+      const emote = btn.dataset.emote;
+      if (emote) net.sendEmote(emote);
+    };
+  });
 }
 function online(prefill = '', watch = false) {
   if (room) {
@@ -555,7 +1174,7 @@ function online(prefill = '', watch = false) {
   }
   showModal(
     'Gather your party.',
-    `<p>Two to four explorers. One dungeon. A plan worth sharing.</p><form id="online-form"><label>Your name<input id="player-name" name="name" maxlength="20" value="Explorer" required autocomplete="nickname" /></label><div class="online-columns"><section><h3>Start something.</h3><p>A private room for your next adventure.</p><label>Party size<select id="room-mode"><option value="party">2–4 explorers</option><option value="duo">Duo · 2 explorers</option></select></label><button class="button primary" type="submit" name="intent" value="create">Create a room ↗</button></section><section><h3>Find your people.</h3><label>Room code<input id="room-code-input" name="code" maxlength="6" placeholder="ABC234" value="${escape(prefill)}" autocomplete="off" autocapitalize="characters" /></label><button class="button subtle" type="submit" name="intent" value="join">Join expedition ↗</button><button class="text-button" type="submit" name="intent" value="watch">${watch ? 'Watch this expedition ↗' : 'Just watching? Spectate'}</button></section></div><p id="form-error" class="form-error" role="alert"></p></form>`,
+    `<p>Two to four explorers. One dungeon. A plan worth sharing.</p><form id="online-form"><label>Your name<input id="player-name" name="name" maxlength="20" value="Explorer" required autocomplete="nickname" /></label><div class="online-columns"><section><h3>Start something.</h3><p>A private room for your next adventure.</p><label>Party size<select id="room-mode"><option value="party">2–4 explorers</option><option value="duo">Duo · 2 explorers</option></select></label><label>Turn order<select id="room-turn-order"><option value="alternating">Alternating turns (classic)</option><option value="simultaneous">Simultaneous turns (fast)</option></select></label><button class="button primary" type="submit" name="intent" value="create">Create a room ↗</button></section><section><h3>Find your people.</h3><label>Room code<input id="room-code-input" name="code" maxlength="6" placeholder="ABC234" value="${escape(prefill)}" autocomplete="off" autocapitalize="characters" /></label><button class="button subtle" type="submit" name="intent" value="join">Join expedition ↗</button><button class="text-button" type="submit" name="intent" value="watch">${watch ? 'Watch this expedition ↗' : 'Just watching? Spectate'}</button></section></div><p id="form-error" class="form-error" role="alert"></p></form>`,
     'ONLINE CO-OP',
   );
   $('#online-form').addEventListener('submit', (event) => {
@@ -570,9 +1189,12 @@ function online(prefill = '', watch = false) {
         await net.create(
           name,
           $<HTMLSelectElement>('#room-mode').value as 'duo' | 'party',
+          $<HTMLSelectElement>('#room-turn-order')?.value as
+            'alternating' | 'simultaneous',
+          getSelectedCosmetic(),
         );
       else if (intent === 'watch') await net.watch(code);
-      else await net.join(name, code);
+      else await net.join(name, code, getSelectedCosmetic());
       if (room?.game) modal.close();
       else lobby();
     });
@@ -594,6 +1216,8 @@ async function daily() {
       await net.create(
         $<HTMLInputElement>('#daily-name').value.trim(),
         'daily',
+        'alternating',
+        getSelectedCosmetic(),
       );
       await net.start();
     });
@@ -619,15 +1243,24 @@ async function daily() {
 function help() {
   showModal(
     'Your hand is your way out.',
-    `<p>You don’t move with arrow keys. You move with cards.</p><ol class="instructions"><li><strong>Read the room.</strong> Red outlined tiles are exactly where enemies will strike. Small circles show their next move.</li><li><strong>Play your hand.</strong> Choose a card, then a highlighted tile. You get two plays per turn. Redraw is free.</li><li><strong>End your turn.</strong> In co-op, each living explorer acts before enemies attack and move. Unused cards are replaced next turn.</li><li><strong>Find the exit.</strong> Defeat every enemy, then reach the doorway. Clear five rooms to escape.</li></ol><div class="help-note">Hazards deal 1 damage when entered. Phase dash skips hazards along the path, but not at its destination. A shield blocks one hit. New rooms restore 3 HP and revive fallen teammates; players who leave stay out.</div><p>Co-op uses separate HP. Swap with any living ally, lend them a play, or taunt an enemy and step out of its new target tile.</p><button id="help-done" class="button primary">Make my first move ↗</button>`,
+    `<p>You don’t move with arrow keys. You move with cards.</p><ol class="instructions"><li><strong>Read the room.</strong> Red outlined tiles are exactly where enemies will strike. Small circles show their next move.</li><li><strong>Play your hand.</strong> Choose a card, then a highlighted tile. You get two plays per turn. Redraw is free.</li><li><strong>End your turn.</strong> In co-op, each living explorer acts before enemies attack and move. Unused cards are replaced next turn.</li><li><strong>Find the exit.</strong> Defeat every enemy, then reach the doorway. Clear all six rooms to escape.</li></ol><div class="help-note">Hazards deal 1 damage when entered. Phase dash skips hazards along the path, but not at its destination. A shield blocks one hit. New rooms restore 3 HP and revive fallen teammates; players who leave stay out.</div><p>Co-op uses separate HP. Swap with any living ally, lend them a play, or taunt an enemy and step out of its new target tile.</p><button id="help-done" class="button primary">Make my first move ↗</button>`,
   );
   $('#help-done').onclick = () => modal.close();
 }
+net.onEmote = (data) => {
+  const member = room?.members.find((m) => m.id === data.playerId);
+  const name = member?.name ?? 'Explorer';
+  toast(`${name}: ${data.emote}`);
+};
 net.onRoom = (next) => {
   const hadGame = Boolean(room?.game);
   room = next;
   if (next.game) {
+    const prevPhase = game.phase;
     game = next.game;
+    if (game.phase === 'won' && prevPhase !== 'won' && next.mode === 'daily') {
+      incrementDailyCount();
+    }
     selected = null;
     targets = [];
     if (!hadGame && modal.open) modal.close();
@@ -662,6 +1295,7 @@ document.querySelectorAll<HTMLElement>('[data-mode]').forEach(
     (button.onclick = () => {
       const mode = button.dataset.mode;
       if (mode === 'solo' || mode === 'duo') void newLocal(mode);
+      else if (mode === 'ghost') showGhostModal();
       else if (mode === 'online') online();
       else void daily();
     }),
@@ -669,10 +1303,13 @@ document.querySelectorAll<HTMLElement>('[data-mode]').forEach(
 $('#end-turn').onclick = () => void act({ type: 'end' });
 $('#new-run').onclick = () =>
   void newLocal(game.mode === 'duo' && !room ? 'duo' : 'solo');
+$('#achievements-button').onclick = showAchievements;
+$('#cosmetics-button').onclick = showCosmeticsModal;
 $('#help-button').onclick = help;
 $('#sound-button').onclick = () => {
   sound = !sound;
-  $('#sound-button').innerHTML = `♫ &nbsp; Sound ${sound ? 'on' : 'off'}`;
+  $('#sound-button').innerHTML = sound ? '🔊' : '🔇';
+  $('#sound-button').title = `Sound: ${sound ? 'On' : 'Off'} (Click to toggle)`;
   $('#sound-button').setAttribute('aria-pressed', `${sound}`);
   beep('support');
 };

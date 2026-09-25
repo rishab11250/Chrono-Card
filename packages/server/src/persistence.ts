@@ -13,7 +13,7 @@ export async function persistence(
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   db.exec(
-    'PRAGMA journal_mode = WAL; CREATE TABLE IF NOT EXISTS scores (run TEXT PRIMARY KEY, date TEXT NOT NULL, name TEXT NOT NULL, turns INTEGER NOT NULL, seconds INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS scores_date ON scores(date, turns, seconds);',
+    'PRAGMA journal_mode = WAL; CREATE TABLE IF NOT EXISTS scores (run TEXT PRIMARY KEY, date TEXT NOT NULL, name TEXT NOT NULL, turns INTEGER NOT NULL, seconds INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS scores_date ON scores(date, turns, seconds); CREATE TABLE IF NOT EXISTS achievements (player_name TEXT NOT NULL, achievement_id TEXT NOT NULL, date TEXT NOT NULL, PRIMARY KEY (player_name, achievement_id)); CREATE TABLE IF NOT EXISTS ghosts (id TEXT PRIMARY KEY, seed INTEGER NOT NULL, mode TEXT NOT NULL, actions_json TEXT NOT NULL, name TEXT NOT NULL, date TEXT NOT NULL);',
   );
   const redis = options.redisUrl
     ? createClient({
@@ -63,6 +63,44 @@ export async function persistence(
       db.prepare(
         'INSERT OR IGNORE INTO scores (run,date,name,turns,seconds) VALUES (?,?,?,?,?)',
       ).run(run, date, name, turns, seconds);
+    },
+    unlockAchievement(playerName: string, achievementId: string, date: string) {
+      db.prepare(
+        'INSERT OR IGNORE INTO achievements (player_name, achievement_id, date) VALUES (?,?,?)',
+      ).run(playerName, achievementId, date);
+    },
+    getAchievements(playerName: string) {
+      return db
+        .prepare(
+          'SELECT achievement_id, date FROM achievements WHERE player_name = ?',
+        )
+        .all(playerName) as { achievement_id: string; date: string }[];
+    },
+    saveGhost(
+      id: string,
+      seed: number,
+      mode: string,
+      actionsJson: string,
+      name: string,
+      date: string,
+    ) {
+      db.prepare(
+        'INSERT OR REPLACE INTO ghosts (id, seed, mode, actions_json, name, date) VALUES (?, ?, ?, ?, ?, ?)',
+      ).run(id, seed, mode, actionsJson, name, date);
+    },
+    getGhosts() {
+      return db
+        .prepare(
+          'SELECT id, seed, mode, actions_json, name, date FROM ghosts ORDER BY date DESC LIMIT 20',
+        )
+        .all() as {
+        id: string;
+        seed: number;
+        mode: string;
+        actions_json: string;
+        name: string;
+        date: string;
+      }[];
     },
     leaderboard(date: string) {
       return db

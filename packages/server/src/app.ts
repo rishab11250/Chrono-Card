@@ -15,13 +15,16 @@ import {
   applyAction,
   createGame,
   dailySeed,
+  resolveSimultaneousRound,
   type ClientEvents,
+  type GameAction,
   type GameState,
   type Member,
   type Mode,
   type Reply,
   type RoomView,
   type ServerEvents,
+  type TurnOrder,
 } from '@chrono/shared';
 import { persistence } from './persistence';
 
@@ -33,6 +36,8 @@ type StoredMember = Member & {
 type Room = {
   code: string;
   mode: Mode;
+  turnOrder: TurnOrder;
+  pendingActions: Map<string, GameAction>;
   host: string;
   members: StoredMember[];
   game: GameState | null;
@@ -79,14 +84,19 @@ const actionSchema = z
           card: z.number().int().min(0).max(4),
           target: z
             .object({
-              x: z.number().int().min(0).max(9),
-              y: z.number().int().min(0).max(9),
+              x: z.number().int().min(0).max(30),
+              y: z.number().int().min(0).max(30),
             })
             .strict()
             .optional(),
         })
         .strict(),
     ]),
+  })
+  .strict();
+const emoteSchema = z
+  .object({
+    emote: z.string().min(1).max(50),
   })
   .strict();
 const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -159,6 +169,8 @@ export async function createApp(
       if (rooms.size >= maxRooms)
         throw new Error('The server is full. Try again shortly.');
       const room = JSON.parse(saved) as Room;
+      room.turnOrder = room.turnOrder ?? 'alternating';
+      room.pendingActions = new Map();
       if (Date.now() - room.touchedAt > 7_200_000)
         throw new Error('This room has expired.');
       room.members.forEach((m) => {
@@ -177,6 +189,13 @@ export async function createApp(
   }
   function paused(room: Room) {
     if (!room.game || room.game.phase !== 'playing') return false;
+    if (room.turnOrder === 'simultaneous') {
+      const living = room.game.players.filter((p) => p.hp > 0);
+      return room.members.some(
+        (m) =>
+          living.some((p) => p.id === m.id) && !m.connected && !m.forfeited,
+      );
+    }
     const current = room.members.find(
       (m) => m.id === activePlayer(room.game!).id,
     );
@@ -187,11 +206,13 @@ export async function createApp(
     return {
       code: room.code,
       mode: room.mode,
+      turnOrder: room.turnOrder,
       host: room.host,
-      members: room.members.map(({ id, name, connected }) => ({
+      members: room.members.map(({ id, name, connected, cosmetic }) => ({
         id,
         name,
         connected,
+        cosmetic,
       })),
       game: room.game,
       paused: paused(room),
@@ -226,27 +247,35 @@ export async function createApp(
     publish(room);
     return { code: room.code, playerId: member.id, token: member.token };
   }
-  function makeMember(name: string): StoredMember {
+  function makeMember(name: string, cosmetic?: string): StoredMember {
     return {
       id: randomUUID(),
       name,
+      cosmetic,
       token: randomBytes(32).toString('hex'),
       connected: true,
       disconnectedAt: null,
       forfeited: false,
     };
   }
-  async function makeRoom(name: string, mode: 'duo' | 'party' | 'daily') {
+  async function makeRoom(
+    name: string,
+    mode: 'duo' | 'party' | 'daily',
+    turnOrder: TurnOrder = 'alternating',
+    cosmetic?: string,
+  ) {
     if (rooms.size >= maxRooms)
       throw new Error('The server is full. Try again shortly.');
     let code = makeCode();
     while (rooms.has(code) || (await storage.load(code))) code = makeCode();
-    const member = makeMember(name);
+    const member = makeMember(name, cosmetic);
     member.connected = false;
     member.disconnectedAt = Date.now();
     const room: Room = {
       code,
       mode,
+      turnOrder,
+      pendingActions: new Map(),
       host: member.id,
       members: [member],
       game: null,
@@ -293,6 +322,37 @@ export async function createApp(
       leaderboard: storage.leaderboard(utcDate()),
     }),
   );
+  app.get('/api/ghosts', (_req, res) =>
+    res.json({
+      ghosts: storage.getGhosts(),
+    }),
+  );
+  app.post('/api/ghosts', express.json({ limit: '64kb' }), (req, res) => {
+    try {
+      const data = z
+        .object({
+          id: z.string().min(1).max(64),
+          seed: z.number().int(),
+          mode: z.string(),
+          actionsJson: z.string(),
+          name: nameSchema,
+          date: z.string().optional(),
+        })
+        .strict()
+        .parse(req.body);
+      storage.saveGhost(
+        data.id,
+        data.seed,
+        data.mode,
+        data.actionsJson,
+        data.name,
+        data.date ?? utcDate(),
+      );
+      res.status(201).json({ ok: true });
+    } catch {
+      res.status(400).json({ error: 'Invalid ghost data.' });
+    }
+  });
   const httpLimits = new Map<string, { time: number; count: number }>();
   app.options('/api/rooms', (req, res) => {
     if (!allowed(req.headers.origin)) {
@@ -320,11 +380,21 @@ export async function createApp(
       count: limit && now - limit.time < 60_000 ? limit.count + 1 : 1,
     });
     try {
-      const { name, mode } = z
-        .object({ name: nameSchema, mode: z.enum(['duo', 'party', 'daily']) })
+      const { name, mode, turnOrder, cosmetic } = z
+        .object({
+          name: nameSchema,
+          mode: z.enum(['duo', 'party', 'daily']),
+          turnOrder: z.enum(['alternating', 'simultaneous']).optional(),
+          cosmetic: z.string().optional(),
+        })
         .strict()
         .parse(req.body);
-      const { room, member } = await makeRoom(name, mode);
+      const { room, member } = await makeRoom(
+        name,
+        mode,
+        turnOrder ?? 'alternating',
+        cosmetic,
+      );
       publish(room);
       res
         .status(201)
@@ -390,11 +460,21 @@ export async function createApp(
     socket.on('room:create', (input, ack) =>
       run(ack, async () => {
         unattached(socket);
-        const { name, mode } = z
-          .object({ name: nameSchema, mode: z.enum(['duo', 'party', 'daily']) })
+        const { name, mode, turnOrder, cosmetic } = z
+          .object({
+            name: nameSchema,
+            mode: z.enum(['duo', 'party', 'daily']),
+            turnOrder: z.enum(['alternating', 'simultaneous']).optional(),
+            cosmetic: z.string().optional(),
+          })
           .strict()
           .parse(input);
-        const { room, member } = await makeRoom(name, mode);
+        const { room, member } = await makeRoom(
+          name,
+          mode,
+          turnOrder ?? 'alternating',
+          cosmetic,
+        );
         if (!socket.connected) return;
         return attach(socket, room, member);
       }),
@@ -402,8 +482,12 @@ export async function createApp(
     socket.on('room:join', (input, ack) =>
       run(ack, async () => {
         unattached(socket);
-        const { name, code } = z
-          .object({ name: nameSchema, code: codeSchema })
+        const { name, code, cosmetic } = z
+          .object({
+            name: nameSchema,
+            code: codeSchema,
+            cosmetic: z.string().optional(),
+          })
           .strict()
           .parse(input);
         const room = await getRoom(code);
@@ -417,7 +501,7 @@ export async function createApp(
           room.members.length >= (room.mode === 'duo' ? 2 : 4)
         )
           throw new Error('This room is full.');
-        const member = makeMember(name);
+        const member = makeMember(name, cosmetic);
         room.members.push(member);
         return attach(socket, room, member);
       }),
@@ -497,6 +581,7 @@ export async function createApp(
           room.mode,
           room.members.map(({ id, name }) => ({ id, name })),
           room.mode === 'daily' ? dailySeed(room.date) : randomInt(0x100000000),
+          room.turnOrder,
         );
         publish(room);
       }),
@@ -510,16 +595,58 @@ export async function createApp(
           throw new Error('Waiting for your teammate to reconnect.');
         if (data.revision !== room.game.revision)
           throw new Error('The board changed. Try your action again.');
-        room.game = applyAction(room.game, member.id, data.action);
-        if (room.mode === 'daily' && room.game.phase === 'won')
-          storage.score(
-            room.runId,
-            room.date,
-            member.name,
-            room.game.turns,
-            Math.round((Date.now() - room.startedAt) / 1000),
+
+        if (room.turnOrder === 'simultaneous') {
+          room.pendingActions.set(member.id, data.action);
+          const livingMembers = room.members.filter((m) => {
+            const p = room.game?.players.find((player) => player.id === m.id);
+            return p && p.hp > 0 && !m.forfeited && m.connected;
+          });
+          const allSubmitted = livingMembers.every((m) =>
+            room.pendingActions.has(m.id),
           );
+          if (allSubmitted) {
+            const actionsList = livingMembers.map((m) => ({
+              playerId: m.id,
+              action: room.pendingActions.get(m.id)!,
+            }));
+            room.pendingActions.clear();
+            room.game = resolveSimultaneousRound(room.game, actionsList);
+            if (room.mode === 'daily' && room.game.phase === 'won') {
+              storage.score(
+                room.runId,
+                room.date,
+                member.name,
+                room.game.turns,
+                Math.round((Date.now() - room.startedAt) / 1000),
+              );
+              storage.unlockAchievement(member.name, 'daily_win', room.date);
+            }
+          }
+        } else {
+          room.game = applyAction(room.game, member.id, data.action);
+          if (room.mode === 'daily' && room.game.phase === 'won') {
+            storage.score(
+              room.runId,
+              room.date,
+              member.name,
+              room.game.turns,
+              Math.round((Date.now() - room.startedAt) / 1000),
+            );
+            storage.unlockAchievement(member.name, 'daily_win', room.date);
+          }
+        }
         publish(room);
+      }),
+    );
+    socket.on('room:emote', (input, ack) =>
+      run(ack, () => {
+        const { room, member } = attached(socket);
+        const data = emoteSchema.parse(input);
+        io.to(room.code).emit('room:emote', {
+          playerId: member.id,
+          emote: data.emote,
+        });
       }),
     );
     socket.on('room:leave', (ack) => run(ack, () => detach(socket, true)));

@@ -340,7 +340,10 @@ class Dungeon extends Phaser.Scene {
 
   renderRoom(level: number) {
     this.staticGraphics.clear();
-    const theme = themes[level],
+    const actIndex = Math.floor(level / 5);
+    const actThemes = [themes[0], themes[2], themes[4]];
+    const theme =
+        actThemes[actIndex] ?? themes[level % themes.length] ?? themes[0],
       tiles = LEVELS[level].tiles;
     const rect = (
       x: number,
@@ -351,8 +354,14 @@ class Dungeon extends Phaser.Scene {
       alpha = 1,
     ) => this.staticGraphics.fillStyle(color, alpha).fillRect(x, y, w, h);
 
-    for (let y = 0; y < 10; y++) {
-      for (let x = 0; x < 10; x++) {
+    const width = LEVELS[level]?.width ?? tiles[0]?.length ?? 10;
+    const height = LEVELS[level]?.height ?? tiles.length;
+    if (this.scale.width !== width * T || this.scale.height !== height * T) {
+      this.scale.resize(width * T, height * T);
+    }
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
         const px = x * T,
           py = y * T,
           tile = tiles[y][x],
@@ -458,8 +467,10 @@ class Dungeon extends Phaser.Scene {
       alpha = 1,
     ) => this.overlayGraphics.fillStyle(color, alpha).fillRect(x, y, w, h);
 
-    for (let y = 0; y < 10; y++) {
-      for (let x = 0; x < 10; x++) {
+    const width = LEVELS[s.level]?.width ?? 10;
+    const height = LEVELS[s.level]?.height ?? 10;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
         const px = x * T,
           py = y * T;
         if (
@@ -604,11 +615,13 @@ class Dungeon extends Phaser.Scene {
           .ellipse(0, 9, 23, 8)
           .setStrokeStyle(1, 0xffeb9a)
           .setVisible(isActive);
+        const isGhost =
+          p.id === 'ghost-1' || p.name.toLowerCase().includes('ghost');
         const cursor = this.add
-          .text(0, -20, '▼', {
+          .text(0, -20, isGhost ? '▼ (ghost)' : '▼', {
             fontFamily: 'monospace',
-            fontSize: '8px',
-            color: '#fff1af',
+            fontSize: isGhost ? '7px' : '8px',
+            color: isGhost ? '#88eeff' : '#fff1af',
           })
           .setOrigin(0.5)
           .setVisible(isActive);
@@ -624,7 +637,25 @@ class Dungeon extends Phaser.Scene {
         }
 
         const sprite = this.add.image(0, -1, 'explorer');
-        if (i > 0) sprite.setTint([0xffffff, 0x9cd8ff, 0xffc496, 0xe0b9ff][i]);
+        if (isGhost) {
+          sprite.setTint(0x78e6ff);
+          sprite.setAlpha(0.72);
+        } else if (i === 0) {
+          try {
+            const skin = localStorage.getItem('chrono-skin');
+            const cosmeticTints: Record<string, number> = {
+              void: 0xcc99ff,
+              solar: 0xffd275,
+              chrono: 0x78e6ff,
+            };
+            if (skin && cosmeticTints[skin])
+              sprite.setTint(cosmeticTints[skin]);
+          } catch {
+            /* Storage might be disabled */
+          }
+        } else if (i > 0) {
+          sprite.setTint([0xffffff, 0x9cd8ff, 0xffc496, 0xe0b9ff][i]);
+        }
 
         const bubble = this.add
           .circle(0, -2, 14, 0x9fe4ef, 0.12)
