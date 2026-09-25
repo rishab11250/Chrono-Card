@@ -98,7 +98,7 @@
               "y": 6
             },
             {
-              "kind": "turret",
+              "kind": "bomber",
               "x": 4,
               "y": 7
             }
@@ -170,7 +170,7 @@
               "y": 4
             },
             {
-              "kind": "turret",
+              "kind": "bomber",
               "x": 8,
               "y": 3
             }
@@ -277,7 +277,7 @@
           ],
           "enemies": [
             {
-              "kind": "turret",
+              "kind": "chaser_elite",
               "x": 5,
               "y": 3
             },
@@ -370,7 +370,7 @@
               "y": 7
             },
             {
-              "kind": "chaser",
+              "kind": "bomber",
               "x": 7,
               "y": 7
             }
@@ -455,7 +455,7 @@
               "y": 5
             },
             {
-              "kind": "chaser",
+              "kind": "bomber",
               "x": 10,
               "y": 6
             }
@@ -526,7 +526,7 @@
           ],
           "enemies": [
             {
-              "kind": "turret",
+              "kind": "chaser_elite",
               "x": 5,
               "y": 2
             },
@@ -570,7 +570,7 @@
           ],
           "enemies": [
             {
-              "kind": "warden_elite",
+              "kind": "chaser_elite",
               "x": 6,
               "y": 5
             },

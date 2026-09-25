@@ -21,6 +21,14 @@
     "name": "Chrono Warden",
     "hp": 4,
     "damage": 2,
-    "description": "Telegraphs a wide cross attack. Enrages below half HP, striking all adjacent tiles."
+    "description": "Charges for two rounds, then strikes a wide cross. Enrages below half HP."
+  },
+  "bomber": {
+    "name": "Cinder Bomber", "hp": 2, "damage": 0,
+    "description": "Stays still. Marks a tile, then leaves embers for three rounds. Embers hurt only on entry."
+  },
+  "chaser_elite": {
+    "name": "Eclipse Seeker", "hp": 4, "damage": 1,
+    "description": "A double-HP Seeker. Charges for two full rounds before its fixed attack and move."
   }
 }

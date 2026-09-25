@@ -19,8 +19,9 @@ export type Card = {
   range: number;
   coop?: boolean;
 };
-export type EnemyKind = 'turret' | 'patroller' | 'chaser' | 'warden_elite';
-export type EnemyIntent = { attack: Position[]; move?: Position };
+export type EnemyKind = 'turret' | 'patroller' | 'chaser' | 'warden_elite' | 'bomber' | 'chaser_elite';
+export type EnemyIntent = { attack: Position[]; move?: Position; hazard?: Position[]; charging?: boolean };
+export type TemporaryHazard = Position & { expiresRound: number };
 export type Enemy = Position & {
   id: string;
   kind: EnemyKind;
@@ -68,6 +69,7 @@ export type GameState = {
   phase: 'playing' | 'choosing' | 'won' | 'lost';
   visitedRooms: string[];
   roomChoices: string[];
+  hazards: TemporaryHazard[];
   players: Player[];
   enemies: Enemy[];
   log: string[];

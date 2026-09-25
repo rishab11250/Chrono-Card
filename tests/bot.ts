@@ -57,6 +57,7 @@ function score(s: GameState) {
   return (
     s.level * 10_000 -
     s.enemies.length * 300 +
+    -s.enemies.reduce((total,e)=>total+e.hp*35,0) +
     s.players.reduce((sum, v) => sum + v.hp * 6 + v.shield * 1.5, 0) -
     dist * 5 -
     s.enemies.reduce(

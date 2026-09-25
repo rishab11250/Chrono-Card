@@ -10,6 +10,7 @@ import {
   legalTargets,
   LEVELS,
   same,
+  tileAt,
   type GameAction,
   type GameState,
   type LeaderboardEntry,
@@ -745,10 +746,13 @@ function selectCard(index: number) {
 }
 function tileLabel(x: number, y: number) {
   const position = { x, y };
-  const tile = LEVELS[game.level].tiles[y][x];
+  const tile = tileAt(game, position);
   const player = game.players.find((p) => p.hp > 0 && same(p, position));
   const enemy = game.enemies.find((e) => same(e, position));
-  return `Column ${x + 1}, row ${y + 1}: ${player ? `${player.name}, ${player.hp} HP` : enemy ? `${ENEMIES[enemy.kind].name}, ${enemy.hp} HP` : tile === '#' ? 'wall' : tile === '~' ? 'hazard, 1 damage' : tile === 'E' ? `exit ${game.enemies.length ? 'locked' : 'open'}` : 'floor'}${game.enemies.some((e) => e.intent.attack.some((p) => same(p, position))) ? ', enemy will attack here' : ''}${targets.some((p) => same(p, position)) ? ', valid target' : ''}`;
+  const pendingHazard = game.enemies.some(e=>e.intent.hazard?.some(p=>same(p,position)));
+  const temporary = (game.hazards ?? []).find(h=>same(h,position));
+  const attacks = game.enemies.filter(e=>e.intent.attack.some(p=>same(p,position)));
+  return `Column ${x + 1}, row ${y + 1}: ${player ? `${player.name}, ${player.hp} HP` : enemy ? `${ENEMIES[enemy.kind].name}, ${enemy.hp} HP${enemy.intent.charging ? ', charging, attacks in two rounds' : ''}` : tile === '#' ? 'wall' : tile === '~' ? 'hazard, 1 damage on entry' : tile === 'E' ? `exit ${game.enemies.length ? 'locked' : 'open'}` : 'floor'}${temporary ? `, embers: ${temporary.expiresRound-game.round} rounds left, 1 damage on entry` : ''}${pendingHazard ? ', Bomber will drop embers here next round' : ''}${attacks.length ? attacks.every(e=>e.intent.charging) ? ', charging attack here in two rounds' : ', enemy will attack here next round' : ''}${targets.some((p) => same(p, position)) ? ', valid target' : ''}`;
 }
 const grid = $('#accessible-grid');
 let currentGridLevel = -1;

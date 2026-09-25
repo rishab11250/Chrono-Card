@@ -42,7 +42,7 @@ export const same = (a: Position, b: Position) => a.x === b.x && a.y === b.y;
 export const distance = (a: Position, b: Position) =>
   Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 export const tileAt = (s: GameState, p: Position) =>
-  LEVELS[s.level].tiles[p.y]?.[p.x] ?? '#';
+  (s.hazards ?? []).some(hazard => same(hazard,p) && hazard.expiresRound > s.round) ? '~' : LEVELS[s.level].tiles[p.y]?.[p.x] ?? '#';
 const livingAt = (s: GameState, p: Position) =>
   s.players.find((v) => v.hp > 0 && same(v, p));
 const enemyAt = (s: GameState, p: Position) =>
@@ -98,8 +98,16 @@ function hazard(s: GameState, p: Player) {
 function planEnemies(s: GameState) {
   const living = s.players.filter((p) => p.hp > 0);
   for (const e of s.enemies) {
+    if (e.intent.charging) {
+      // Keep exactly the same coordinates for the second announced round.
+      e.intent.charging = false;
+      continue;
+    }
     e.intent = { attack: [] };
-    if (e.kind === 'turret') {
+    if (e.kind === 'bomber') {
+      const nearest = [...living].sort((a,b)=>distance(e,a)-distance(e,b))[0];
+      if (nearest && LEVELS[s.level].tiles[nearest.y][nearest.x] !== 'E') e.intent.hazard = [{x:nearest.x,y:nearest.y}];
+    } else if (e.kind === 'turret') {
       const d = DIRECTIONS[e.heading % 4];
       for (let n = 1; n <= 3; n++) {
         const p = { x: e.x + d.x * n, y: e.y + d.y * n };
@@ -164,9 +172,11 @@ function planEnemies(s: GameState) {
         (p) => tileAt(s, p) !== '#' && !enemyAt(s, p) && !livingAt(s, p),
       );
     }
+    if (e.kind === 'chaser_elite' || e.kind === 'warden_elite') e.intent.charging = true;
   }
 }
 function loadLevel(s: GameState) {
+  s.hazards = [];
   s.phase = 'playing';
   s.roomChoices = [];
   s.visitedRooms = [...(s.visitedRooms ?? []), LEVELS[s.level].id];
@@ -259,6 +269,7 @@ export function createGame(
     phase: 'playing',
     visitedRooms: [],
     roomChoices: [],
+    hazards: [],
     players: [],
     enemies: [],
     log: [],
@@ -376,7 +387,8 @@ function play(s: GameState, index: number, target?: Position) {
     ally.bonus = Math.min(2, ally.bonus + 1);
   } else if (id === 'taunt') {
     if (!enemy) throw new Error('Choose an enemy to challenge.');
-    enemy.intent.attack = [{ x: p.x, y: p.y }];
+    if (enemy.kind === 'bomber') enemy.intent.hazard = [{x:p.x,y:p.y}];
+    else enemy.intent.attack = [{ x: p.x, y: p.y }];
   }
   p.hand.splice(index, 1);
   p.discard.push(id);
@@ -385,13 +397,22 @@ function play(s: GameState, index: number, target?: Position) {
   note(s, `${p.name} played ${card.name}.`);
 }
 function enemyTurn(s: GameState) {
+  s.hazards = (s.hazards ?? []).filter(hazard=>hazard.expiresRound > s.round + 1);
   for (const e of s.enemies) {
+    if (e.intent.charging) continue;
+    for (const target of e.intent.hazard ?? []) {
+      if (LEVELS[s.level].tiles[target.y]?.[target.x] !== '.' && LEVELS[s.level].tiles[target.y]?.[target.x] !== '~') continue;
+      const existing = s.hazards.find(hazard=>same(hazard,target));
+      if (existing) existing.expiresRound = s.round + 4;
+      else s.hazards.push({...target,expiresRound:s.round+4});
+    }
     // Resolve the exact displayed coordinates, never recalculate an attack mid-round.
     for (const p of s.players.filter((v) => v.hp > 0))
       if (e.intent.attack.some((v) => same(v, p)))
         hit(s, p, ENEMIES[e.kind].damage);
   }
   for (const e of s.enemies) {
+    if (e.intent.charging) continue;
     const next = e.intent.move;
     if (next && !livingAt(s, next) && !enemyAt(s, next)) {
       if (e.kind === 'patroller') e.heading = next.x > e.x ? 1 : 0;

@@ -342,6 +342,9 @@ sprites.step2 = Array.from({ length: 24 }, (_, y) =>
   }).join(''),
 );
 sprites.duo = sprites.explorer;
+sprites.chaser_elite = sprites.chaser.map(row=>row.replaceAll('P','R').replaceAll('p','r'));
+sprites.bomber = [
+ '........................','.........YYY............','..........y.............','..........h.............','........oooooo..........','......ooddddddoo........','.....odssssssssdo.......','....odsslsssssssdo......','....odssllssssssdo......','....odssoosssoosdo......','....odsYwossYwosdo......','....odssYYsssYYsdo......','....odssssssssssdo......','.....oddssssssddo.......','......oddddddddo........','.......oooooooo.........','......oHHooooHHo........','......oooo..oooo........','........................','........................','........................','........................','........................','........................'];
 export function pixelSvg(name: string) {
   const rows = sprites[name] ?? sprites.explorer;
   return `<svg class="pixel-sprite" viewBox="0 0 ${Math.max(...rows.map((r) => r.length))} ${rows.length}" shape-rendering="crispEdges" aria-hidden="true">${rows.flatMap((row, y) => [...row].map((p, x) => (palette[p] ? `<rect x="${x}" y="${y}" width="1" height="1" fill="${palette[p]}"/>` : ''))).join('')}</svg>`;

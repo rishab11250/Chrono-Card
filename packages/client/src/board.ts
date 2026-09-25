@@ -66,6 +66,7 @@ interface TrackedPlayer {
 }
 
 interface TrackedEnemy {
+  charge: Phaser.GameObjects.Text;
   container: Phaser.GameObjects.Container;
   sprite: Phaser.GameObjects.Image;
   shadow: Phaser.GameObjects.Ellipse;
@@ -474,10 +475,21 @@ class Dungeon extends Phaser.Scene {
       for (let x = 0; x < width; x++) {
         const px = x * T,
           py = y * T;
+        const hazard = (s.hazards ?? []).find(h=>same(h,{x,y}) && h.expiresRound>s.round);
+        if (hazard) {
+          oRect(px+3,py+3,26,26,0xb6533c,.65);
+          for(let k=0;k<3;k++){oRect(px+7+k*7,py+13,3,12,0xffbb66);oRect(px+8+k*7,py+10,1,10,0xffeead);}
+        }
+        if (s.enemies.some(e=>e.intent.hazard?.some(p=>same(p,{x,y})))) {
+          oRect(px+2,py+2,28,2,0xffc765);oRect(px+2,py+28,28,2,0xffc765);
+          oRect(px+2,py+2,2,28,0xffc765);oRect(px+28,py+2,2,28,0xffc765);
+          oRect(px+12,py+12,8,8,0x48324e);oRect(px+15,py+8,2,4,0xffc765);
+        }
         if (
           s.enemies.some((e) => e.intent.attack.some((p) => same(p, { x, y })))
         ) {
-          oRect(px + 2, py + 2, 28, 28, 0xcb545b, 0.25);
+          const chargingOnly = !s.enemies.some(e=>!e.intent.charging && e.intent.attack.some(p=>same(p,{x,y})));
+          oRect(px + 2, py + 2, 28, 28, chargingOnly ? 0x957bd1 : 0xcb545b, 0.25);
           for (const [cx, cy] of [
             [3, 3],
             [25, 3],
@@ -544,8 +556,9 @@ class Dungeon extends Phaser.Scene {
         const maxHp = ENEMIES[e.kind]?.hp ?? 2;
         const fillW = Math.max(0, (e.hp / maxHp) * 8);
         const hpFg = this.add.rectangle(-4 + fillW / 2, 13, fillW, 1, 0xf48f81);
+        const charge = this.add.text(0,-20,'',{fontFamily:'monospace',fontSize:'7px',color:'#fff1b8',backgroundColor:'#493457'}).setOrigin(.5);
 
-        container.add([shadow, sprite, hpBg, hpFg]);
+        container.add([shadow, sprite, hpBg, hpFg, charge]);
         this.entityContainer.add(container);
 
         if (!this.reduced()) {
@@ -569,6 +582,7 @@ class Dungeon extends Phaser.Scene {
           tileX: e.x,
           tileY: e.y,
           kind: e.kind,
+          charge,
         };
         this.enemies.set(e.id, tracked);
       } else {
@@ -596,6 +610,7 @@ class Dungeon extends Phaser.Scene {
           tracked.container.setPosition(targetPx, targetPy);
         }
       }
+      tracked.charge.setText(e.intent.charging ? 'CHARGE 2' : e.kind.endsWith('_elite') ? 'READY 1' : '');
     }
 
     s.players.forEach((p, i) => {
