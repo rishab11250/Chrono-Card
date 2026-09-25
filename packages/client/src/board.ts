@@ -586,9 +586,13 @@ class Dungeon extends Phaser.Scene {
       }
     }
 
-    // 5. Tracked Players (smooth slide on move)
     s.players.forEach((p, i) => {
       let tracked = this.players.get(p.id);
+      if (p.hp <= 0) {
+        if (tracked) tracked.container.setVisible(false);
+        return;
+      }
+
       const targetPx = p.x * T + 16;
       const targetPy = p.y * T + 16;
       const isActive = p.id === activePlayer(s).id;
@@ -651,15 +655,9 @@ class Dungeon extends Phaser.Scene {
           tileY: p.y,
         };
         this.players.set(p.id, tracked);
-      } else {
         tracked.ring.setVisible(isActive);
         tracked.cursor.setVisible(isActive);
         tracked.shield.setVisible(Boolean(p.shield));
-
-        if (p.hp <= 0) {
-          tracked.container.setVisible(false);
-          return;
-        }
         tracked.container.setVisible(true);
 
         if (tracked.tileX !== p.x || tracked.tileY !== p.y) {
