@@ -11,19 +11,27 @@ import type {
   Player,
   Position,
   TurnOrder,
+  Act,
 } from './types';
 
 export const CARDS = Object.fromEntries(
   cardData.map((card) => [card.id, card]),
 ) as Record<CardId, Card>;
 export const ENEMIES = enemyData;
-export const LEVELS: Level[] = (
-  levelData as Omit<Level, 'width' | 'height'>[]
-).map((lvl) => ({
+export const ACTS = levelData.acts as Act[];
+export const LEVELS: Level[] = ACTS.flatMap(act => act.rooms.map((lvl) => ({
   ...lvl,
+  actId: act.id,
   width: lvl.tiles[0]?.length ?? 10,
   height: lvl.tiles.length,
-}));
+})));
+export const levelIndex = (id: string) => LEVELS.findIndex(level => level.id === id);
+export function nextRoomIds(s: GameState): string[] {
+  const level = LEVELS[s.level];
+  if (level.next.length) return [...level.next];
+  const act = ACTS.findIndex(act => act.id === level.actId);
+  return ACTS[act + 1] ? [ACTS[act + 1].entry] : [];
+}
 export const DIRECTIONS: Position[] = [
   { x: 0, y: -1 },
   { x: 1, y: 0 },
@@ -159,6 +167,9 @@ function planEnemies(s: GameState) {
   }
 }
 function loadLevel(s: GameState) {
+  s.phase = 'playing';
+  s.roomChoices = [];
+  s.visitedRooms = [...(s.visitedRooms ?? []), LEVELS[s.level].id];
   const positions = [
     { x: 1, y: 1 },
     { x: 2, y: 1 },
@@ -246,6 +257,8 @@ export function createGame(
     active: 0,
     plays: 2,
     phase: 'playing',
+    visitedRooms: [],
+    roomChoices: [],
     players: [],
     enemies: [],
     log: [],
@@ -416,12 +429,19 @@ function checkOutcome(s: GameState) {
     s.enemies.length === 0 &&
     s.players.some((p) => p.hp > 0 && tileAt(s, p) === 'E')
   ) {
-    if (s.level === LEVELS.length - 1) {
+    const choices = nextRoomIds(s);
+    if (choices.length === 0) {
       s.phase = 'won';
       note(s, 'You escaped the cycle.');
     } else {
-      s.level++;
-      loadLevel(s);
+      if (choices.length > 1) {
+        s.phase = 'choosing';
+        s.roomChoices = choices;
+        note(s, `${activePlayer(s).name} chooses the party's next path.`);
+      } else {
+        s.level = levelIndex(choices[0]);
+        loadLevel(s);
+      }
     }
   }
 }
@@ -430,10 +450,17 @@ export function applyAction(
   playerId: string,
   action: GameAction,
 ): GameState {
-  if (state.phase !== 'playing') throw new Error('This expedition has ended.');
+  if (state.phase === 'won' || state.phase === 'lost') throw new Error('This expedition has ended.');
   if (activePlayer(state).id !== playerId)
     throw new Error('Wait for your turn.');
   const s = structuredClone(state);
+  if (s.phase === 'choosing') {
+    if (action.type !== 'choose-room' || !s.roomChoices.includes(action.roomId)) throw new Error('Choose one of the offered paths.');
+    s.level = levelIndex(action.roomId);
+    loadLevel(s);
+    s.revision++;
+    return s;
+  }
   if (action.type === 'play') play(s, action.card, action.target);
   else if (action.type === 'end') advance(s);
   else throw new Error('Unknown action.');
@@ -480,12 +507,15 @@ export function resolveSimultaneousRound(
 export function abandonPlayer(state: GameState, playerId: string): GameState {
   const s = structuredClone(state);
   const p = s.players.find((v) => v.id === playerId);
-  if (!p || s.phase !== 'playing') return s;
+  if (!p || s.phase === 'won' || s.phase === 'lost') return s;
   p.hp = 0;
   p.abandoned = true;
   note(s, `${p.name} left the expedition.`);
   if (s.players.every((v) => v.hp <= 0)) s.phase = 'lost';
-  else if (activePlayer(s).id === playerId) advance(s);
+  else if (activePlayer(s).id === playerId) {
+    if (s.phase === 'choosing') s.active = s.players.findIndex(p => p.hp > 0);
+    else advance(s);
+  }
   s.revision++;
   return s;
 }

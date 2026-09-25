@@ -283,7 +283,9 @@ describe('enemy rounds and expedition outcomes', () => {
     expect(play(s, 8, 8).level).toBe(0);
     s.enemies = [];
     s.players[0].hp = 4;
-    const next = play(s, 8, 8);
+    const choosing = play(s, 8, 8);
+    expect(choosing.phase).toBe('choosing');
+    const next = applyAction(choosing, 'p1', {type: 'choose-room', roomId: choosing.roomChoices[0]});
     expect(next.level).toBe(1);
     expect(next.players[0]).toMatchObject({ x: 1, y: 1, hp: 7 });
     s.level = LEVELS.length - 1;
@@ -310,7 +312,8 @@ describe('enemy rounds and expedition outcomes', () => {
     s.players[0].hand = ['step1'];
     s.players[0].x = 7;
     s.players[0].y = 8;
-    const next = play(s, 8, 8);
+    const choosing = play(s, 8, 8);
+    const next = applyAction(choosing, 'a', {type: 'choose-room', roomId: choosing.roomChoices[0]});
     expect(next.players[1].hp).toBe(0);
     expect(next.players[2].hp).toBe(3);
   });

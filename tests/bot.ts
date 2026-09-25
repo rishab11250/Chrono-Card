@@ -37,6 +37,7 @@ function pathDistance(s: GameState, from: Position, target: Position) {
 }
 function score(s: GameState) {
   if (s.phase === 'won') return 1_000_000;
+  if (s.phase === 'choosing') return 500_000;
   if (s.phase === 'lost') return -1_000_000;
   const p = activePlayer(s);
   let exitPos = { x: 8, y: 8 };
@@ -107,6 +108,7 @@ function candidates(s: GameState): { state: GameState; action: GameAction }[] {
   return result;
 }
 export function chooseAction(s: GameState): GameAction {
+  if (s.phase === 'choosing') return {type: 'choose-room', roomId: s.roomChoices[0]};
   const options = candidates(s);
   if (!options.length) return { type: 'end' };
   const base = score(s);

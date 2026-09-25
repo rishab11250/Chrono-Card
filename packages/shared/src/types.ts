@@ -29,6 +29,9 @@ export type Enemy = Position & {
   intent: EnemyIntent;
 };
 export type Level = {
+  actId: string;
+  next: string[];
+  choiceDescription: string;
   id: string;
   name: string;
   subtitle: string;
@@ -37,6 +40,7 @@ export type Level = {
   width: number;
   height: number;
 };
+export type Act = { id: string; name: string; entry: string; rooms: Omit<Level, 'width' | 'height' | 'actId'>[] };
 export type Player = Position & {
   id: string;
   name: string;
@@ -61,14 +65,16 @@ export type GameState = {
   turns: number;
   active: number;
   plays: number;
-  phase: 'playing' | 'won' | 'lost';
+  phase: 'playing' | 'choosing' | 'won' | 'lost';
+  visitedRooms: string[];
+  roomChoices: string[];
   players: Player[];
   enemies: Enemy[];
   log: string[];
   revision: number;
 };
 export type GameAction =
-  { type: 'play'; card: number; target?: Position } | { type: 'end' };
+  { type: 'play'; card: number; target?: Position } | { type: 'end' } | { type: 'choose-room'; roomId: string };
 export type Member = {
   id: string;
   name: string;
@@ -151,4 +157,3 @@ export type AuthResponse = {
   token: string;
   user: UserProfile;
 };
-

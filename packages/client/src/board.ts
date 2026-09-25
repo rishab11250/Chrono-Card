@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import {
   activePlayer,
+  ACTS,
   ENEMIES,
   LEVELS,
   same,
@@ -340,7 +341,7 @@ class Dungeon extends Phaser.Scene {
 
   renderRoom(level: number) {
     this.staticGraphics.clear();
-    const actIndex = Math.floor(level / 5);
+    const actIndex = ACTS.findIndex(act => act.id === LEVELS[level].actId);
     const actThemes = [themes[0], themes[2], themes[4]];
     const theme =
         actThemes[actIndex] ?? themes[level % themes.length] ?? themes[0],

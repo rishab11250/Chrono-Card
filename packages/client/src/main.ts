@@ -1,6 +1,8 @@
 import './style.css';
+import './progression.css';
 import {
   activePlayer,
+  ACTS,
   applyAction,
   CARDS,
   createGame,
@@ -615,7 +617,7 @@ function setSelection(index: number | null) {
   render();
 }
 async function act(action: GameAction) {
-  if (!canPlay()) return;
+  if (!(action.type === 'choose-room' ? canDecide() : canPlay())) return;
   const playedCardId =
     action.type === 'play' ? activePlayer(game).hand[action.card] : null;
   const soundCategory = playedCardId
@@ -823,30 +825,20 @@ function render() {
     `CHAPTER ${String(game.level + 1).padStart(2, '0')} / ${String(LEVELS.length).padStart(2, '0')}`;
   $('#room-name').textContent = level.name;
   $('#room-subtitle').textContent = level.subtitle;
-  const acts: { name: string; start: number; end: number }[] = [];
-  const actCount = Math.max(1, Math.ceil(LEVELS.length / 5));
-  for (let a = 0; a < actCount; a++) {
-    const start = a * 5;
-    const end = Math.min(LEVELS.length - 1, (a + 1) * 5 - 1);
-    if (start < LEVELS.length) {
-      const roman =
-        ['ACT I', 'ACT II', 'ACT III', 'ACT IV'][a] ?? `ACT ${a + 1}`;
-      acts.push({ name: roman, start, end });
-    }
-  }
+  const acts = ACTS.map(act => ({name: act.name.split(' — ')[0], start: LEVELS.findIndex(level=>level.id===act.entry), end: LEVELS.findIndex(level=>level.id===act.rooms[act.rooms.length-1].id)}));
   $('#room-progress').innerHTML = acts
     .map((act) => {
       const steps = LEVELS.slice(act.start, act.end + 1)
         .map((l, idx) => {
           const i = act.start + idx;
-          const isBoss = (i + 1) % 5 === 0 && i < LEVELS.length - 1;
+          const isBoss = l.next.length === 0 && i < LEVELS.length - 1;
           const isFinalBoss = i === LEVELS.length - 1;
           const bossIcon = isFinalBoss ? '👑' : isBoss ? '⚔' : '';
           const label =
-            i < game.level ? '✓' : bossIcon || String(i + 1).padStart(2, '0');
+            game.visitedRooms?.includes(l.id) && i !== game.level ? '✓' : bossIcon || String(i + 1).padStart(2, '0');
           const classes = [
             'progress-step',
-            i < game.level ? 'complete' : i === game.level ? 'current' : '',
+            i === game.level ? 'current' : game.visitedRooms?.includes(l.id) ? 'complete' : '',
             bossIcon ? 'boss-step' : '',
             isFinalBoss ? 'final-boss-step' : '',
           ]
@@ -969,8 +961,8 @@ function render() {
   } else if (!inLobby) {
     void loadBoard().then((b) => b.update(game, targets));
   }
-  $('#outcome').hidden = game.phase === 'playing';
-  if (game.phase !== 'playing') {
+  $('#outcome').hidden = game.phase !== 'won' && game.phase !== 'lost';
+  if (game.phase === 'won' || game.phase === 'lost') {
     const canSaveGhost =
       !isGhostMode && game.mode === 'solo' && recordedActions.length > 0;
     $('#outcome').innerHTML =
@@ -997,7 +989,7 @@ function render() {
 
   if (
     isGhostMode &&
-    game.phase === 'playing' &&
+    (game.phase === 'playing' || game.phase === 'choosing') &&
     activePlayer(game).id === 'ghost-1' &&
     !ghostPlaying
   ) {
@@ -1005,13 +997,14 @@ function render() {
     window.setTimeout(() => {
       if (
         !isGhostMode ||
-        game.phase !== 'playing' ||
+        (game.phase !== 'playing' && game.phase !== 'choosing') ||
         activePlayer(game).id !== 'ghost-1'
       ) {
         ghostPlaying = false;
         return;
       }
       let action = ghostReplayActions[ghostActionIndex++];
+      if (game.phase === 'choosing') action = {type: 'choose-room', roomId: game.roomChoices[0]};
       if (!action) action = { type: 'end' };
       try {
         game = applyAction(game, 'ghost-1', action);
@@ -1029,6 +1022,7 @@ function render() {
     }, 350);
   }
 
+  renderProgression();
   if (game) {
     checkAchievements(game);
   }
@@ -1061,6 +1055,22 @@ function showProfileModal() {
     renderAuthModal('login');
   }
 }
+function canDecide() {
+  return !busy && game.phase === 'choosing' && (!isGhostMode || activePlayer(game).id !== 'ghost-1') && (!room || (net.socket.connected && !room.paused && activePlayer(game).id === net.session?.playerId));
+}
+let progressionModal = '';
+function renderProgression() {
+  if (game.phase !== 'choosing') {
+    if (progressionModal) {modal.close(); progressionModal = '';}
+    return;
+  }
+  const signature = `${game.seed}:${game.revision}:${canDecide()}:${connection}`;
+  if (progressionModal === signature && modal.open) return;
+  progressionModal = signature;
+  showModal('Which path next?', `<p>${canDecide() ? 'Choose the party’s next room. Both paths meet again before the Act’s warden.' : `${escape(activePlayer(game).name)} is choosing the party’s path.`}</p><div class="progression-options">${game.roomChoices.map(id=>{const level=LEVELS.find(level=>level.id===id)!;return `<button class="progression-option" data-room-choice="${id}" ${canDecide()?'':'disabled'}><strong>${escape(level.name)}</strong><span>${escape(level.choiceDescription)}</span></button>`;}).join('')}</div>`, 'ROOM CLEARED');
+  modal.querySelectorAll<HTMLButtonElement>('[data-room-choice]').forEach(button=>button.onclick=()=>void act({type:'choose-room',roomId:button.dataset.roomChoice!}));
+}
+
 function renderLoggedInProfile(user: UserProfile) {
   const s = user.stats;
   const winRate =

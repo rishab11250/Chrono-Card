@@ -85,6 +85,7 @@ const actionSchema = z
     revision: z.number().int().min(0),
     action: z.discriminatedUnion('type', [
       z.object({ type: z.literal('end') }).strict(),
+      z.object({type: z.literal('choose-room'), roomId: z.string().min(1).max(60)}).strict(),
       z
         .object({
           type: z.literal('play'),
@@ -219,8 +220,8 @@ export async function createApp(
     }
   }
   function paused(room: Room) {
-    if (!room.game || room.game.phase !== 'playing') return false;
-    if (room.turnOrder === 'simultaneous') {
+    if (!room.game || room.game.phase === 'won' || room.game.phase === 'lost') return false;
+    if (room.turnOrder === 'simultaneous' && room.game.phase === 'playing') {
       const living = room.game.players.filter((p) => p.hp > 0);
       return room.members.some(
         (m) =>
@@ -803,7 +804,8 @@ export async function createApp(
         if (data.revision !== room.game.revision)
           throw new Error('The board changed. Try your action again.');
 
-        if (room.turnOrder === 'simultaneous') {
+        if (room.turnOrder === 'simultaneous' && room.game.phase === 'playing') {
+          if (data.action.type === 'choose-room') throw new Error('No room choice is pending.');
           room.pendingActions.set(member.id, data.action);
           const livingMembers = room.members.filter((m) => {
             const p = room.game?.players.find((player) => player.id === m.id);
