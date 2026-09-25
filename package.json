@@ -21,17 +21,19 @@
     "format:check": "prettier --check .",
     "docs:pdf": "node scripts/pdf.mjs"
   },
+  "dependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.0"
+  },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
     "@playwright/test": "^1.56.0",
-    "@types/express": "^5.0.0",
-    "@types/node": "^22.15.0",
     "concurrently": "^9.2.0",
     "eslint": "^9.39.0",
     "globals": "^16.5.0",
     "prettier": "^3.6.0",
     "tsx": "^4.20.0",
-    "typescript": "^5.9.0",
     "typescript-eslint": "^8.46.0",
     "vitest": "^4.1.11"
   }
