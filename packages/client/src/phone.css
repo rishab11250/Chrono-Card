@@ -1,0 +1,188 @@
+/* Target usefulness is advisory, never a disabled interaction state. */
+.card.not-useful:not(:disabled) {
+  background: #c5c7c9;
+  border-color: #707681;
+  color: #303846;
+  box-shadow:
+    inset 2px 2px #eee,
+    inset -2px -2px #8b9199,
+    2px 3px #171d2b;
+}
+.card.not-useful .card-art {
+  filter: grayscale(1);
+  opacity: 0.65;
+}
+.card-status {
+  display: block;
+  margin-top: 5px;
+  font-size: 16px;
+  line-height: 1.05;
+}
+.card.not-useful .card-status {
+  border-top: 1px dashed currentColor;
+  padding-top: 4px;
+  font-weight: bold;
+}
+.card:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.card.selected {
+  outline: 3px solid #f8cc77;
+  outline-offset: 2px;
+}
+.card:focus-visible {
+  outline: 3px solid #fff3a6;
+  outline-offset: 3px;
+}
+.draft-options {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.progression-option .pixel-sprite {
+  width: 48px;
+  height: 48px;
+}
+#progression-resume {
+  margin: 10px 0;
+  width: 100%;
+  min-height: 44px;
+}
+.modal-close {
+  min-width: 44px;
+  min-height: 44px;
+}
+#phaser-board canvas {
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+}
+dialog {
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+@media (max-width: 760px) {
+  body {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .workspace,
+  .hand-heading > div {
+    min-width: 0;
+  }
+  .sidebar-right {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .sidebar-bottom {
+    flex-basis: 100%;
+    justify-content: center;
+  }
+  .new-run-btn,
+  .profile-badge-btn,
+  .nav-item {
+    min-height: 44px;
+  }
+  .room-heading {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .room-heading h1 {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .room-heading p {
+    max-width: none;
+  }
+  .room-progress {
+    align-self: flex-start;
+  }
+  .hand {
+    touch-action: pan-x pan-y;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+  .card {
+    flex-basis: 155px;
+    min-height: 228px;
+    touch-action: pan-x pan-y;
+  }
+  .card-description {
+    font-size: 18px;
+    line-height: 1.1;
+  }
+  .card-status {
+    font-size: 17px;
+  }
+  .hand-heading {
+    flex-wrap: wrap;
+  }
+  .hand-heading > div {
+    flex: 1 1 180px;
+  }
+  .hand-heading .button,
+  .tool-btn,
+  .emote-btn,
+  .text-button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .draft-options,
+  .progression-options {
+    grid-template-columns: 1fr;
+  }
+  .draft-options .progression-option {
+    display: grid;
+    grid-template-columns: 48px 1fr;
+    gap: 6px 12px;
+    min-height: 115px;
+  }
+  .draft-options .progression-option > span:first-child {
+    grid-row: 1 / 3;
+    align-self: center;
+  }
+  .draft-options .progression-option > span:last-child {
+    grid-column: 2;
+  }
+  .progression-option {
+    min-height: 100px;
+  }
+  dialog {
+    width: calc(100% - 20px);
+    max-width: calc(100% - 20px);
+    max-height: calc(100dvh - 20px);
+    padding: 20px 16px;
+  }
+  dialog input,
+  dialog select {
+    font-size: 18px;
+    min-height: 44px;
+  }
+  .room-heading h1 {
+    overflow-wrap: anywhere;
+  }
+  .game-footer {
+    padding-bottom: 12px;
+  }
+}
+@media (max-width: 360px) {
+  .room-progress {
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .board-toolbar {
+    font-size: 6px;
+    gap: 4px;
+  }
+  .hand-heading .button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .progression-option {
+    transition: none;
+    animation: none;
+  }
+}
