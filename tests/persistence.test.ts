@@ -33,6 +33,38 @@ it('persists leaderboard entries across database restarts', async () => {
   }
 });
 
+it('persists user accounts across database restarts', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'chrono-users-'));
+  try {
+    const database = join(directory, 'users.sqlite');
+    const first = await persistence({ database });
+    first.createUser({
+      id: 'u-1',
+      username: 'ChronoMaster',
+      password_hash: 'hash123',
+      salt: 'salt123',
+      avatar: 'Chrono Phantom',
+      created_at: '2026-09-25',
+    });
+    first.updateUserStats('u-1', { won: true, turns: 12, daily: true });
+    await first.close();
+
+    const second = await persistence({ database });
+    try {
+      const user = await second.getUserByUsername('chronomaster');
+      expect(user).not.toBeNull();
+      expect(user?.username).toBe('ChronoMaster');
+      expect(user?.runs_played).toBe(1);
+      expect(user?.runs_won).toBe(1);
+      expect(user?.best_turns).toBe(12);
+    } finally {
+      await second.close();
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 it.skipIf(!process.env.TEST_REDIS_URL)(
   'recovers authoritative rooms and private sessions after a server restart using Redis',
   async () => {

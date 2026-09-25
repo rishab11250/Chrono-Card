@@ -25,8 +25,15 @@ import {
   type RoomView,
   type ServerEvents,
   type TurnOrder,
+  type UserProfile,
 } from '@chrono/shared';
-import { persistence } from './persistence';
+import { persistence, type StoredUser } from './persistence';
+import {
+  createToken,
+  hashPassword,
+  verifyPassword,
+  verifyToken,
+} from './auth';
 
 type StoredMember = Member & {
   token: string;
@@ -97,6 +104,30 @@ const actionSchema = z
 const emoteSchema = z
   .object({
     emote: z.string().min(1).max(50),
+  })
+  .strict();
+const registerSchema = z
+  .object({
+    username: z
+      .string()
+      .trim()
+      .min(3, 'Username must be at least 3 characters.')
+      .max(20, 'Username must be at most 20 characters.')
+      .regex(
+        /^[a-zA-Z0-9_]+$/,
+        'Username must only contain letters, numbers, and underscores.',
+      ),
+    password: z
+      .string()
+      .min(6, 'Password must be at least 6 characters.')
+      .max(100),
+    avatar: z.string().trim().max(30).optional(),
+  })
+  .strict();
+const loginSchema = z
+  .object({
+    username: z.string().trim().min(1),
+    password: z.string().min(1),
   })
   .strict();
 const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -351,6 +382,182 @@ export async function createApp(
       res.status(201).json({ ok: true });
     } catch {
       res.status(400).json({ error: 'Invalid ghost data.' });
+    }
+  });
+  function authUser(req: express.Request): StoredUser | null {
+    const auth = req.headers.authorization;
+    if (!auth || !auth.startsWith('Bearer ')) return null;
+    const token = auth.slice(7).trim();
+    const payload = verifyToken(token);
+    if (!payload) return null;
+    return storage.getUserById(payload.id);
+  }
+  function formatProfile(
+    u: StoredUser,
+    achievements: { achievement_id: string; date: string }[],
+  ): UserProfile {
+    return {
+      id: u.id,
+      username: u.username,
+      avatar: u.avatar,
+      createdAt: u.created_at,
+      stats: {
+        runsPlayed: u.runs_played,
+        runsWon: u.runs_won,
+        dailyWins: u.daily_wins,
+        bestTurns: u.best_turns,
+      },
+      achievements: achievements.map((a) => ({
+        id: a.achievement_id,
+        date: a.date,
+      })),
+    };
+  }
+  app.options(/^\/api\/auth/, (req, res) => {
+    if (!allowed(req.headers.origin)) {
+      res.sendStatus(403);
+      return;
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.sendStatus(204);
+  });
+  app.post(
+    '/api/auth/register',
+    express.json({ limit: '8kb' }),
+    async (req, res) => {
+      try {
+        const data = registerSchema.parse(req.body);
+        const existing = await storage.getUserByUsername(data.username);
+        if (existing) {
+          res.status(409).json({ error: 'Username is already taken.' });
+          return;
+        }
+        const { hash, salt } = hashPassword(data.password);
+        const user = storage.createUser({
+          id: randomUUID(),
+          username: data.username,
+          password_hash: hash,
+          salt,
+          avatar: data.avatar ?? 'Explorer',
+          created_at: new Date().toISOString(),
+        });
+        const token = createToken({ id: user.id, username: user.username });
+        const achievements = storage.getAchievements(user.username);
+        res.status(201).json({
+          ok: true,
+          token,
+          user: formatProfile(user, achievements),
+        });
+      } catch (error) {
+        res.status(400).json({
+          error:
+            error instanceof z.ZodError
+              ? error.issues[0]?.message ?? 'Invalid registration details.'
+              : 'Unable to register.',
+        });
+      }
+    },
+  );
+  app.post(
+    '/api/auth/login',
+    express.json({ limit: '8kb' }),
+    async (req, res) => {
+      try {
+        const data = loginSchema.parse(req.body);
+        const user = await storage.getUserByUsername(data.username);
+        if (
+          !user ||
+          !verifyPassword(data.password, user.salt, user.password_hash)
+        ) {
+          res.status(401).json({ error: 'Incorrect username or password.' });
+          return;
+        }
+        const token = createToken({ id: user.id, username: user.username });
+        const achievements = storage.getAchievements(user.username);
+        res.json({
+          ok: true,
+          token,
+          user: formatProfile(user, achievements),
+        });
+      } catch {
+        res.status(400).json({ error: 'Invalid login details.' });
+      }
+    },
+  );
+  app.get('/api/auth/me', (req, res) => {
+    const user = authUser(req);
+    if (!user) {
+      res.status(401).json({ error: 'Not authenticated.' });
+      return;
+    }
+    const achievements = storage.getAchievements(user.username);
+    res.json({
+      ok: true,
+      user: formatProfile(user, achievements),
+    });
+  });
+  app.post('/api/auth/avatar', express.json({ limit: '4kb' }), (req, res) => {
+    const user = authUser(req);
+    if (!user) {
+      res.status(401).json({ error: 'Not authenticated.' });
+      return;
+    }
+    const avatar = z.string().trim().min(1).max(30).parse(req.body?.avatar);
+    storage.updateUserAvatar(user.id, avatar);
+    res.json({ ok: true, avatar });
+  });
+  app.post(
+    '/api/auth/record-run',
+    express.json({ limit: '8kb' }),
+    (req, res) => {
+      const user = authUser(req);
+      if (!user) {
+        res.status(401).json({ error: 'Not authenticated.' });
+        return;
+      }
+      const schema = z.object({
+        won: z.boolean().optional(),
+        turns: z.number().int().min(1).optional(),
+        daily: z.boolean().optional(),
+      });
+      const data = schema.parse(req.body);
+      const updated = storage.updateUserStats(user.id, data);
+      const achievements = storage.getAchievements(user.username);
+      res.json({
+        ok: true,
+        user: updated ? formatProfile(updated, achievements) : null,
+      });
+    },
+  );
+  app.get('/api/users/:username', async (req, res) => {
+    try {
+      const user = await storage.getUserByUsername(req.params.username);
+      if (!user) {
+        res.status(404).json({ error: 'Player not found.' });
+        return;
+      }
+      const achievements = storage.getAchievements(user.username);
+      res.json({
+        ok: true,
+        user: {
+          username: user.username,
+          avatar: user.avatar,
+          createdAt: user.created_at,
+          stats: {
+            runsPlayed: user.runs_played,
+            runsWon: user.runs_won,
+            dailyWins: user.daily_wins,
+            bestTurns: user.best_turns,
+          },
+          achievements: achievements.map((a) => ({
+            id: a.achievement_id,
+            date: a.date,
+          })),
+        },
+      });
+    } catch {
+      res.status(404).json({ error: 'Player not found.' });
     }
   });
   const httpLimits = new Map<string, { time: number; count: number }>();

@@ -2111,3 +2111,201 @@ th {
   color: #72805d;
   margin-bottom: 8px;
 }
+
+/* Auth & Profile */
+.profile-badge-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
+  font-size: 15px;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.profile-badge-btn .profile-icon {
+  font-size: 14px;
+}
+.profile-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 10px 0;
+}
+.profile-header-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  background: #d8d4bc;
+  border: 2px solid #a19e88;
+}
+.profile-avatar-large {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e7e4cd;
+  border: 2px solid #8a9b6a;
+  border-radius: 4px;
+}
+.profile-avatar-large svg {
+  width: 36px;
+  height: 36px;
+}
+.profile-user-info h3 {
+  margin: 0;
+  font-size: 22px;
+  color: #2b3040;
+}
+.profile-meta {
+  margin: 2px 0 6px;
+  font-size: 14px;
+  color: #656c7a;
+}
+.profile-badge-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.user-badge {
+  font-size: 13px;
+  padding: 2px 7px;
+  background: #c3bf9e;
+  border: 1px solid #9c997e;
+  color: #252b36;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.user-badge.win-badge {
+  background: #8a9b6a;
+  color: #ffffff;
+  border-color: #6e7f50;
+}
+.profile-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.profile-stat-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 4px;
+  background: #e2dfc4;
+  border: 2px solid #b2af99;
+  text-align: center;
+}
+.profile-stat-box .stat-number {
+  font-size: 20px;
+  font-weight: bold;
+  color: #262c3a;
+}
+.profile-stat-box .stat-desc {
+  font-size: 13px;
+  color: #666e7d;
+  margin-top: 2px;
+  text-transform: uppercase;
+}
+.profile-stat-box .highlight-win {
+  color: #4a7c29;
+}
+.profile-stat-box .highlight-daily {
+  color: #b87c12;
+}
+.profile-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.section-title-sm {
+  font-size: 13px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  color: #5d6677;
+}
+.avatar-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.avatar-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  background: #d8d4bc;
+  border: 2px solid #a19e88;
+  cursor: pointer;
+  font-family: inherit;
+}
+.avatar-option.selected {
+  border-color: #8a9b6a;
+  background: #ede9d0;
+  box-shadow: 0 0 0 1px #8a9b6a;
+}
+.avatar-option svg {
+  width: 24px;
+  height: 24px;
+}
+.avatar-option small {
+  font-size: 12px;
+  color: #404859;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.auth-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid #a19e88;
+  margin-bottom: 12px;
+}
+.auth-tab {
+  flex: 1;
+  padding: 8px 12px;
+  background: #cfcbaf;
+  border: none;
+  font-family: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  color: #4f5768;
+}
+.auth-tab.active {
+  background: #eae7d3;
+  color: #212633;
+  font-weight: bold;
+  border-bottom: 2px solid #8a9b6a;
+}
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.auth-form label {
+  display: flex;
+  flex-direction: column;
+  font-size: 15px;
+  color: #3b4252;
+  gap: 3px;
+}
+.auth-form input,
+.auth-form select {
+  font-family: inherit;
+  font-size: 16px;
+  padding: 7px 10px;
+  background: #ffffff;
+  border: 2px solid #a19e88;
+  color: #1e2330;
+}
+.auth-footer-note {
+  font-size: 13px;
+  color: #636b7b;
+  margin-top: 8px;
+  text-align: center;
+  line-height: 1.3;
+}
+

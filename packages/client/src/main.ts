@@ -13,9 +13,11 @@ import {
   type LeaderboardEntry,
   type Position,
   type RoomView,
+  type UserProfile,
 } from '@chrono/shared';
 import { API_URL, Network } from './net';
 import { icon } from './icons';
+import { auth } from './auth';
 
 type Board = {
   update: (state: GameState, targets: Position[]) => void;
@@ -418,6 +420,7 @@ $('#app').innerHTML = `
     <div class="sidebar-right">
       <span id="connection" class="connection">Local expedition</span>
       <button id="new-run" class="button subtle small new-run-btn" title="Start a fresh run">↻ <span>New run</span></button>
+      <button id="profile-button" class="button subtle small profile-badge-btn" title="Player Profile & Account" aria-label="Player Profile"><span class="profile-icon">👤</span><span id="profile-name">Login</span></button>
       <div class="sidebar-bottom">
         <button id="achievements-button" class="tool-btn" title="Achievements" aria-label="Achievements">🏆</button>
         <button id="cosmetics-button" class="tool-btn" title="Explorer skins" aria-label="Explorer skins">🎨</button>
@@ -1029,8 +1032,200 @@ function render() {
   if (game) {
     checkAchievements(game);
   }
+  if (
+    prevState &&
+    prevState.phase === 'playing' &&
+    (game.phase === 'won' || game.phase === 'lost')
+  ) {
+    void auth.recordRun({
+      won: game.phase === 'won',
+      turns: game.turns,
+      daily: room?.mode === 'daily',
+    });
+  }
   announce(prevState, game);
   prevState = game;
+}
+function updateProfileBadge() {
+  const user = auth.getUser();
+  const nameEl = $('#profile-name');
+  if (nameEl) {
+    nameEl.textContent = user ? user.username : 'Login';
+  }
+}
+function showProfileModal() {
+  const user = auth.getUser();
+  if (user) {
+    renderLoggedInProfile(user);
+  } else {
+    renderAuthModal('login');
+  }
+}
+function renderLoggedInProfile(user: UserProfile) {
+  const s = user.stats;
+  const winRate =
+    s.runsPlayed > 0 ? Math.round((s.runsWon / s.runsPlayed) * 100) : 0;
+  const best = s.bestTurns < 999999 ? `${s.bestTurns} turns` : '—';
+  const joinedDate = user.createdAt ? user.createdAt.slice(0, 10) : 'Active';
+
+  const body = `
+    <div class="profile-container">
+      <div class="profile-header-card">
+        <div class="profile-avatar-large">
+          ${icon('explorer')}
+        </div>
+        <div class="profile-user-info">
+          <h3>${escape(user.username)}</h3>
+          <p class="profile-meta">Explorer · Joined ${escape(joinedDate)}</p>
+          <div class="profile-badge-row">
+            <span class="user-badge">${escape(user.avatar || 'Explorer')}</span>
+            <span class="user-badge win-badge">${winRate}% Win Rate</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-stats-grid">
+        <div class="profile-stat-box">
+          <span class="stat-number">${s.runsPlayed}</span>
+          <span class="stat-desc">Expeditions</span>
+        </div>
+        <div class="profile-stat-box">
+          <span class="stat-number highlight-win">${s.runsWon}</span>
+          <span class="stat-desc">Victories</span>
+        </div>
+        <div class="profile-stat-box">
+          <span class="stat-number highlight-daily">${s.dailyWins}</span>
+          <span class="stat-desc">Daily Wins</span>
+        </div>
+        <div class="profile-stat-box">
+          <span class="stat-number">${best}</span>
+          <span class="stat-desc">Best Escape</span>
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <div class="section-title-sm">AVATAR IDENTITY</div>
+        <div class="avatar-pick-grid">
+          ${COSMETICS.map(
+            (c) => `
+            <button class="avatar-option ${user.avatar === c.name ? 'selected' : ''}" data-avatar="${escape(c.name)}">
+              <span>${icon('explorer')}</span>
+              <small>${escape(c.name)}</small>
+            </button>
+          `,
+          ).join('')}
+        </div>
+      </div>
+
+      <div class="dialog-actions profile-actions">
+        <button id="profile-logout-btn" class="button subtle">Log out</button>
+        <button id="profile-close-btn" class="button primary">Back to game</button>
+      </div>
+    </div>
+  `;
+
+  showModal('Explorer Dossier', body, 'PLAYER IDENTITY');
+  $('#profile-close-btn').onclick = () => modal.close();
+  $('#profile-logout-btn').onclick = () => {
+    auth.logout();
+    toast('Logged out successfully.');
+    updateProfileBadge();
+    modal.close();
+  };
+  document
+    .querySelectorAll<HTMLButtonElement>('.avatar-option')
+    .forEach((btn) => {
+      btn.onclick = async () => {
+        const av = btn.dataset.avatar;
+        if (av) {
+          await auth.updateAvatar(av);
+          toast(`Avatar set to ${av}`);
+          const updated = auth.getUser();
+          if (updated) renderLoggedInProfile(updated);
+        }
+      };
+    });
+}
+function renderAuthModal(activeTab: 'login' | 'register') {
+  const isLogin = activeTab === 'login';
+  const body = `
+    <div class="auth-tabs">
+      <button class="auth-tab ${isLogin ? 'active' : ''}" id="tab-login">Sign In</button>
+      <button class="auth-tab ${!isLogin ? 'active' : ''}" id="tab-register">Register</button>
+    </div>
+
+    <form id="auth-form" class="auth-form">
+      <label>
+        Username
+        <input type="text" id="auth-username" required minlength="3" maxlength="20" placeholder="e.g. ChronoKnight" autocomplete="username" />
+      </label>
+      <label>
+        Password
+        <input type="password" id="auth-password" required minlength="6" placeholder="At least 6 characters" autocomplete="${isLogin ? 'current-password' : 'new-password'}" />
+      </label>
+      ${
+        !isLogin
+          ? `
+        <label>
+          Starting Title
+          <select id="auth-avatar">
+            <option value="Explorer">Explorer</option>
+            <option value="Void Voyager">Void Voyager</option>
+            <option value="Solar Warden">Solar Warden</option>
+            <option value="Chrono Phantom">Chrono Phantom</option>
+          </select>
+        </label>
+      `
+          : ''
+      }
+      <p id="form-error" class="form-error" role="alert"></p>
+      <div class="dialog-actions">
+        <button type="button" id="auth-guest" class="button subtle">Continue as Guest</button>
+        <button type="submit" id="auth-submit" class="button primary">${isLogin ? 'Sign In ↗' : 'Create Account ↗'}</button>
+      </div>
+    </form>
+    <p class="auth-footer-note">Accounts sync your runs, best times, and achievements across devices.</p>
+  `;
+
+  showModal(
+    isLogin ? 'Sign In to Chrono Card' : 'Create Explorer Account',
+    body,
+    'ARCHIVES ACCESS',
+  );
+
+  $('#tab-login').onclick = () => renderAuthModal('login');
+  $('#tab-register').onclick = () => renderAuthModal('register');
+  $('#auth-guest').onclick = () => modal.close();
+
+  const form = $<HTMLFormElement>('#auth-form');
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const username = ($<HTMLInputElement>('#auth-username').value || '').trim();
+    const password = $<HTMLInputElement>('#auth-password').value || '';
+    const avatar = !isLogin
+      ? $<HTMLSelectElement>('#auth-avatar')?.value || 'Explorer'
+      : undefined;
+
+    const errorEl = $('#form-error');
+    if (errorEl) errorEl.textContent = '';
+
+    await safe(async () => {
+      if (isLogin) {
+        await auth.login(username, password);
+        toast(`Welcome back, ${username}!`);
+      } else {
+        await auth.register(username, password, avatar);
+        toast(`Account created! Welcome, ${username}!`);
+      }
+      updateProfileBadge();
+      const u = auth.getUser();
+      if (u) {
+        renderLoggedInProfile(u);
+      } else {
+        modal.close();
+      }
+    });
+  };
 }
 function showModal(
   title: string,
@@ -1099,14 +1294,15 @@ async function newLocal(mode: 'solo' | 'duo') {
   connection = 'Local expedition';
   isGhostMode = false;
   recordedActions = [];
+  const myName = auth.getUser()?.username ?? 'You';
   game = createGame(
     mode,
     mode === 'duo'
       ? [
-          { id: 'local-1', name: 'Explorer 1' },
+          { id: 'local-1', name: myName },
           { id: 'local-2', name: 'Explorer 2' },
         ]
-      : [{ id: 'local-1', name: 'You' }],
+      : [{ id: 'local-1', name: myName }],
     seed(),
   );
   selected = null;
@@ -1304,6 +1500,9 @@ $('#end-turn').onclick = () => void act({ type: 'end' });
 $('#new-run').onclick = () =>
   void newLocal(game.mode === 'duo' && !room ? 'duo' : 'solo');
 $('#achievements-button').onclick = showAchievements;
+$('#profile-button').onclick = showProfileModal;
+auth.onChange = () => updateProfileBadge();
+void auth.init().then(() => updateProfileBadge());
 $('#cosmetics-button').onclick = showCosmeticsModal;
 $('#help-button').onclick = help;
 $('#sound-button').onclick = () => {

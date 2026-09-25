@@ -130,3 +130,25 @@ export interface ServerEvents {
   'room:closed': (reason: string) => void;
   'room:emote': (data: { playerId: string; emote: string }) => void;
 }
+
+export type UserStats = {
+  runsPlayed: number;
+  runsWon: number;
+  dailyWins: number;
+  bestTurns: number;
+};
+
+export type UserProfile = {
+  id: string;
+  username: string;
+  avatar: string;
+  createdAt: string;
+  stats: UserStats;
+  achievements?: { id: string; date: string }[];
+};
+
+export type AuthResponse = {
+  token: string;
+  user: UserProfile;
+};
+

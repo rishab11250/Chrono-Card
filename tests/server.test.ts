@@ -7,6 +7,8 @@ import {
   type RoomView,
   type ServerEvents,
   type Session,
+  type AuthResponse,
+  type UserProfile,
 } from '@chrono/shared';
 import { createApp } from '../packages/server/src/app';
 import { chooseAction } from './bot';
@@ -327,4 +329,91 @@ describe('authoritative rooms', () => {
     app.storage.score('other', room.date, 'Fast', 1, 10);
     expect(app.storage.leaderboard(room.date)[0].name).toBe('Fast');
   }, 120_000);
+  it('registers, logs in, and retrieves user profile with stats', async () => {
+    const regRes = await fetch(`${url}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: 'TestExplorer',
+        password: 'password123',
+        avatar: 'Solar Warden',
+      }),
+    });
+    expect(regRes.status).toBe(201);
+    const regData = (await regRes.json()) as AuthResponse & { ok: boolean };
+    expect(regData.ok).toBe(true);
+    expect(regData.token).toBeTruthy();
+    expect(regData.user.username).toBe('TestExplorer');
+    expect(regData.user.avatar).toBe('Solar Warden');
+    expect(regData.user.stats.runsPlayed).toBe(0);
+
+    const dupRes = await fetch(`${url}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: 'testexplorer',
+        password: 'password456',
+      }),
+    });
+    expect(dupRes.status).toBe(409);
+
+    const loginRes = await fetch(`${url}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: 'TestExplorer',
+        password: 'password123',
+      }),
+    });
+    expect(loginRes.status).toBe(200);
+    const loginData = (await loginRes.json()) as AuthResponse & {
+      ok: boolean;
+    };
+    expect(loginData.ok).toBe(true);
+    const token = loginData.token;
+
+    const meRes = await fetch(`${url}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(meRes.status).toBe(200);
+    const meData = (await meRes.json()) as { ok: boolean; user: UserProfile };
+    expect(meData.user.username).toBe('TestExplorer');
+
+    const avatarRes = await fetch(`${url}/api/auth/avatar`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ avatar: 'Chrono Phantom' }),
+    });
+    expect(avatarRes.status).toBe(200);
+
+    const runRes = await fetch(`${url}/api/auth/record-run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ won: true, turns: 14, daily: true }),
+    });
+    expect(runRes.status).toBe(200);
+    const runData = (await runRes.json()) as {
+      ok: boolean;
+      user: UserProfile;
+    };
+    expect(runData.user.stats.runsPlayed).toBe(1);
+    expect(runData.user.stats.runsWon).toBe(1);
+    expect(runData.user.stats.dailyWins).toBe(1);
+    expect(runData.user.stats.bestTurns).toBe(14);
+
+    const pubRes = await fetch(`${url}/api/users/TestExplorer`);
+    expect(pubRes.status).toBe(200);
+    const pubData = (await pubRes.json()) as {
+      ok: boolean;
+      user: UserProfile;
+    };
+    expect(pubData.user.username).toBe('TestExplorer');
+    expect(pubData.user.stats.runsWon).toBe(1);
+  });
 });
