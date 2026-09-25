@@ -269,6 +269,7 @@ export function createGame(
     phase: 'playing',
     visitedRooms: [],
     roomChoices: [],
+    draftChoices: {},
     hazards: [],
     players: [],
     enemies: [],
@@ -319,9 +320,10 @@ function play(s: GameState, index: number, target?: Position) {
   const p = activePlayer(s);
   if (!Number.isInteger(index) || !p.hand[index])
     throw new Error('Choose a card from your hand.');
-  if (s.plays < 1) throw new Error('No plays left. End your turn.');
   const id = p.hand[index];
   const card = CARDS[id];
+  if (s.plays < (card.cost ?? 1)) throw new Error('No plays left. End your turn.');
+  if ((p.cooldowns?.[id] ?? 0) > s.round) throw new Error('This card is recharging.');
   const t =
     target ??
     (id === 'shield' || id === 'redraw' ? { x: p.x, y: p.y } : undefined);
@@ -334,7 +336,21 @@ function play(s: GameState, index: number, target?: Position) {
     throw new Error('Choose a floor tile.');
   const enemy = enemyAt(s, t);
   const ally = livingAt(s, t);
-  if (id === 'step1' || id === 'step2' || id === 'dash') {
+  if (id === 'blink') {
+    if (same(p,t) || distance(p,t)>card.range || enemy || ally) throw new Error('Choose an empty tile within 2 steps.');
+    Object.assign(p,t); hazard(s,p);
+  } else if (id === 'cleave') {
+    if (!same(p,t) || !s.enemies.some(e=>distance(p,e)===1)) throw new Error('Stand beside an enemy and target yourself.');
+    s.enemies.forEach(e=>{if(distance(p,e)===1)e.hp-=2;});
+    s.enemies=s.enemies.filter(e=>e.hp>0);
+  } else if (id === 'forge') {
+    const pile=[p.hand,p.deck,p.discard].find(pile=>pile.includes('strike'));
+    if (!same(p,t) || !pile) throw new Error('Target yourself with an Iron edge still in your deck.');
+    pile[pile.indexOf('strike')]='strike_plus';
+  } else if (id === 'mend') {
+    if (!ally || ally.hp>=ally.maxHp) throw new Error('Choose an injured living explorer.');
+    ally.hp=Math.min(ally.maxHp,ally.hp+3);
+  } else if (id === 'step1' || id === 'step2' || id === 'dash') {
     const path = straightPath(p, t);
     if (!path.length || path.length > card.range)
       throw new Error(`Move 1–${card.range} tiles.`);
@@ -364,7 +380,7 @@ function play(s: GameState, index: number, target?: Position) {
     }
     if (enemy) Object.assign(enemy, origin);
     hazard(s, p);
-  } else if (id === 'strike' || id === 'arrow') {
+  } else if (id === 'strike' || id === 'arrow' || id === 'strike_plus' || id === 'quickshot') {
     const path = straightPath(p, t);
     if (
       !enemy ||
@@ -375,7 +391,7 @@ function play(s: GameState, index: number, target?: Position) {
         .some((v) => tileAt(s, v) === '#' || enemyAt(s, v) || livingAt(s, v))
     )
       throw new Error('Choose an enemy in clear range.');
-    enemy.hp -= 2;
+    enemy.hp -= id === 'strike_plus' ? 3 : id === 'quickshot' ? 1 : 2;
     s.enemies = s.enemies.filter((e) => e.hp > 0);
   } else if (id === 'shield') {
     if (!ally) throw new Error('Choose yourself or a living ally.');
@@ -393,7 +409,8 @@ function play(s: GameState, index: number, target?: Position) {
   p.hand.splice(index, 1);
   p.discard.push(id);
   if (id === 'redraw') draw(s, p);
-  else s.plays--;
+  else s.plays -= card.cost ?? 1;
+  if (card.cooldown) (p.cooldowns ??= {})[id]=s.round+card.cooldown;
   note(s, `${p.name} played ${card.name}.`);
 }
 function enemyTurn(s: GameState) {
@@ -441,6 +458,14 @@ function advance(s: GameState) {
   p.bonus = 0;
   draw(s, p);
 }
+function finishDraft(s: GameState) {
+  const next=s.players.findIndex(p=>!p.abandoned && s.draftChoices[p.id]?.length);
+  if(next>=0){s.active=next;return;}
+  s.draftChoices={};
+  const choices=nextRoomIds(s);
+  if(choices.length>1){s.phase='choosing';s.roomChoices=choices;s.active=s.players.findIndex(p=>p.hp>0);}
+  else {s.level=levelIndex(choices[0]);loadLevel(s);}
+}
 function checkOutcome(s: GameState) {
   if (s.players.every((p) => p.hp <= 0)) {
     s.phase = 'lost';
@@ -455,14 +480,11 @@ function checkOutcome(s: GameState) {
       s.phase = 'won';
       note(s, 'You escaped the cycle.');
     } else {
-      if (choices.length > 1) {
-        s.phase = 'choosing';
-        s.roomChoices = choices;
-        note(s, `${activePlayer(s).name} chooses the party's next path.`);
-      } else {
-        s.level = levelIndex(choices[0]);
-        loadLevel(s);
-      }
+      s.phase='drafting';
+      const pool=Object.values(CARDS).filter(card=>card.draft).map(card=>card.id);
+      s.draftChoices=Object.fromEntries(s.players.filter(p=>!p.abandoned).map(p=>[p.id,shuffle(s,[...pool]).slice(0,3)]));
+      finishDraft(s);
+      note(s, 'Room cleared. Each explorer may keep one new card.');
     }
   }
 }
@@ -475,6 +497,16 @@ export function applyAction(
   if (activePlayer(state).id !== playerId)
     throw new Error('Wait for your turn.');
   const s = structuredClone(state);
+  if (s.phase === 'drafting') {
+    const p=activePlayer(s);
+    if(action.type!=='draft-card' || !s.draftChoices[p.id]?.includes(action.cardId)) throw new Error('Choose one of your offered cards.');
+    p.discard.push(action.cardId);
+    delete s.draftChoices[p.id];
+    note(s, `${p.name} drafted ${CARDS[action.cardId].name}.`);
+    finishDraft(s);
+    s.revision++;
+    return s;
+  }
   if (s.phase === 'choosing') {
     if (action.type !== 'choose-room' || !s.roomChoices.includes(action.roomId)) throw new Error('Choose one of the offered paths.');
     s.level = levelIndex(action.roomId);
@@ -534,14 +566,15 @@ export function abandonPlayer(state: GameState, playerId: string): GameState {
   note(s, `${p.name} left the expedition.`);
   if (s.players.every((v) => v.hp <= 0)) s.phase = 'lost';
   else if (activePlayer(s).id === playerId) {
-    if (s.phase === 'choosing') s.active = s.players.findIndex(p => p.hp > 0);
+    if (s.phase === 'drafting') finishDraft(s);
+    else if (s.phase === 'choosing') s.active = s.players.findIndex(p => p.hp > 0);
     else advance(s);
   }
   s.revision++;
   return s;
 }
 export function legalTargets(s: GameState, card: number): Position[] {
-  if (s.phase !== 'playing' || s.plays < 1) return [];
+  if (s.phase !== 'playing') return [];
   const level = LEVELS[s.level];
   const targets: Position[] = [];
   for (let y = 0; y < level.height; y++)

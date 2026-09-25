@@ -12,6 +12,7 @@ import {
   same,
   tileAt,
   type GameAction,
+  type CardId,
   type GameState,
   type LeaderboardEntry,
   type Position,
@@ -618,7 +619,7 @@ function setSelection(index: number | null) {
   render();
 }
 async function act(action: GameAction) {
-  if (!(action.type === 'choose-room' ? canDecide() : canPlay())) return;
+  if (!(action.type === 'choose-room' || action.type === 'draft-card' ? canDecide() : canPlay())) return;
   const playedCardId =
     action.type === 'play' ? activePlayer(game).hand[action.card] : null;
   const soundCategory = playedCardId
@@ -657,7 +658,7 @@ let dragState = {
 };
 
 function startCardDrag(e: PointerEvent, index: number) {
-  if (!canPlay() || game.plays < 1) return;
+  if (!canPlay() || game.plays < (CARDS[activePlayer(game).hand[index]].cost ?? 1)) return;
   selectCard(index);
   dragState = {
     active: true,
@@ -723,7 +724,7 @@ window.addEventListener('pointerup', (e) => {
 });
 
 function selectCard(index: number) {
-  if (!canPlay() || game.plays < 1) return;
+  if (!canPlay() || game.plays < (CARDS[activePlayer(game).hand[index]].cost ?? 1)) return;
   if (selected === index) {
     setSelection(null);
     return;
@@ -932,7 +933,7 @@ function render() {
   $('#hand').innerHTML = p.hand
     .map((id, index) => {
       const card = CARDS[id];
-      return `<button class="card ${card.category} ${selected === index ? 'selected' : ''}" data-card="${index}" aria-pressed="${selected === index}" ${!playable || game.plays < 1 ? 'disabled' : ''}><span class="card-top"><span>${card.category.toUpperCase()}</span><kbd>${index + 1}</kbd></span><span class="card-art" aria-hidden="true"><span class="art-orbit"></span><span>${icon(id)}</span><i>✦</i></span><strong>${card.name}</strong><span class="card-description">${card.description}</span><span class="card-bottom">${id === 'redraw' ? 'FREE PLAY' : '1 PLAY'}<span>${card.category === 'move' ? '↗' : card.category === 'attack' ? '✧' : '◇'}</span></span></button>`;
+      return `<button class="card ${card.category} ${selected === index ? 'selected' : ''}" data-card="${index}" aria-pressed="${selected === index}" ${!playable || game.plays < (card.cost ?? 1) ? 'disabled' : ''}><span class="card-top"><span>${card.category.toUpperCase()}</span><kbd>${index + 1}</kbd></span><span class="card-art" aria-hidden="true"><span class="art-orbit"></span><span>${icon(id)}</span><i>✦</i></span><strong>${card.name}</strong><span class="card-description">${card.description}</span><span class="card-bottom">${id === 'redraw' || card.cost === 0 ? 'FREE PLAY' : '1 PLAY'}<span>${card.category === 'move' ? '↗' : card.category === 'attack' ? '✧' : '◇'}</span></span></button>`;
     })
     .join('');
   document
@@ -993,7 +994,7 @@ function render() {
 
   if (
     isGhostMode &&
-    (game.phase === 'playing' || game.phase === 'choosing') &&
+    (game.phase === 'playing' || game.phase === 'choosing' || game.phase === 'drafting') &&
     activePlayer(game).id === 'ghost-1' &&
     !ghostPlaying
   ) {
@@ -1001,7 +1002,7 @@ function render() {
     window.setTimeout(() => {
       if (
         !isGhostMode ||
-        (game.phase !== 'playing' && game.phase !== 'choosing') ||
+        (game.phase !== 'playing' && game.phase !== 'choosing' && game.phase !== 'drafting') ||
         activePlayer(game).id !== 'ghost-1'
       ) {
         ghostPlaying = false;
@@ -1009,6 +1010,7 @@ function render() {
       }
       let action = ghostReplayActions[ghostActionIndex++];
       if (game.phase === 'choosing') action = {type: 'choose-room', roomId: game.roomChoices[0]};
+      if (game.phase === 'drafting') action = {type: 'draft-card', cardId: game.draftChoices['ghost-1'][0]};
       if (!action) action = { type: 'end' };
       try {
         game = applyAction(game, 'ghost-1', action);
@@ -1032,7 +1034,7 @@ function render() {
   }
   if (
     prevState &&
-    prevState.phase === 'playing' &&
+    prevState.phase !== 'won' && prevState.phase !== 'lost' &&
     (game.phase === 'won' || game.phase === 'lost')
   ) {
     void auth.recordRun({
@@ -1060,17 +1062,22 @@ function showProfileModal() {
   }
 }
 function canDecide() {
-  return !busy && game.phase === 'choosing' && (!isGhostMode || activePlayer(game).id !== 'ghost-1') && (!room || (net.socket.connected && !room.paused && activePlayer(game).id === net.session?.playerId));
+  return !busy && (game.phase === 'choosing' || game.phase === 'drafting') && (!isGhostMode || activePlayer(game).id !== 'ghost-1') && (!room || (net.socket.connected && !room.paused && activePlayer(game).id === net.session?.playerId));
 }
 let progressionModal = '';
 function renderProgression() {
-  if (game.phase !== 'choosing') {
+  if (game.phase !== 'choosing' && game.phase !== 'drafting') {
     if (progressionModal) {modal.close(); progressionModal = '';}
     return;
   }
   const signature = `${game.seed}:${game.revision}:${canDecide()}:${connection}`;
   if (progressionModal === signature && modal.open) return;
   progressionModal = signature;
+  if(game.phase==='drafting') {
+    showModal('A gift from the ruins', `<p>${escape(activePlayer(game).name)}: choose one card to keep for this expedition. ${canDecide()?'':'Waiting for their choice…'}</p><div class="progression-options draft-options">${(game.draftChoices[activePlayer(game).id]??[]).map(id=>`<button class="progression-option" data-draft-card="${id}" ${canDecide()?'':'disabled'}><span aria-hidden="true">${icon(id)}</span><strong>${escape(CARDS[id].name)}</strong><span>${escape(CARDS[id].description)}</span></button>`).join('')}</div>`, 'DRAFT • KEEP ONE');
+    modal.querySelectorAll<HTMLButtonElement>('[data-draft-card]').forEach(button=>button.onclick=()=>void act({type:'draft-card',cardId:button.dataset.draftCard as CardId}));
+    return;
+  }
   showModal('Which path next?', `<p>${canDecide() ? 'Choose the party’s next room. Both paths meet again before the Act’s warden.' : `${escape(activePlayer(game).name)} is choosing the party’s path.`}</p><div class="progression-options">${game.roomChoices.map(id=>{const level=LEVELS.find(level=>level.id===id)!;return `<button class="progression-option" data-room-choice="${id}" ${canDecide()?'':'disabled'}><strong>${escape(level.name)}</strong><span>${escape(level.choiceDescription)}</span></button>`;}).join('')}</div>`, 'ROOM CLEARED');
   modal.querySelectorAll<HTMLButtonElement>('[data-room-choice]').forEach(button=>button.onclick=()=>void act({type:'choose-room',roomId:button.dataset.roomChoice!}));
 }

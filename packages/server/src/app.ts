@@ -15,6 +15,8 @@ import {
   applyAction,
   createGame,
   dailySeed,
+  CARDS,
+  type CardId,
   resolveSimultaneousRound,
   type ClientEvents,
   type GameAction,
@@ -86,6 +88,7 @@ const actionSchema = z
     action: z.discriminatedUnion('type', [
       z.object({ type: z.literal('end') }).strict(),
       z.object({type: z.literal('choose-room'), roomId: z.string().min(1).max(60)}).strict(),
+      z.object({type:z.literal('draft-card'),cardId:z.enum(Object.keys(CARDS) as [CardId,...CardId[]])}).strict(),
       z
         .object({
           type: z.literal('play'),
@@ -805,7 +808,7 @@ export async function createApp(
           throw new Error('The board changed. Try your action again.');
 
         if (room.turnOrder === 'simultaneous' && room.game.phase === 'playing') {
-          if (data.action.type === 'choose-room') throw new Error('No room choice is pending.');
+          if (data.action.type === 'choose-room' || data.action.type === 'draft-card') throw new Error('No progression choice is pending.');
           room.pendingActions.set(member.id, data.action);
           const livingMembers = room.members.filter((m) => {
             const p = room.game?.players.find((player) => player.id === m.id);

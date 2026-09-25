@@ -9,7 +9,7 @@ export type CardId =
   | 'shield'
   | 'redraw'
   | 'boost'
-  | 'taunt';
+  | 'taunt' | 'blink' | 'cleave' | 'quickshot' | 'mend' | 'forge' | 'strike_plus';
 export type Card = {
   id: CardId;
   name: string;
@@ -18,6 +18,9 @@ export type Card = {
   description: string;
   range: number;
   coop?: boolean;
+  draft?: boolean;
+  cost?: number;
+  cooldown?: number;
 };
 export type EnemyKind = 'turret' | 'patroller' | 'chaser' | 'warden_elite' | 'bomber' | 'chaser_elite';
 export type EnemyIntent = { attack: Position[]; move?: Position; hazard?: Position[]; charging?: boolean };
@@ -52,6 +55,7 @@ export type Player = Position & {
   deck: CardId[];
   discard: CardId[];
   bonus: number;
+  cooldowns?: Partial<Record<CardId, number>>;
   abandoned?: boolean;
 };
 export type TurnOrder = 'alternating' | 'simultaneous';
@@ -66,7 +70,8 @@ export type GameState = {
   turns: number;
   active: number;
   plays: number;
-  phase: 'playing' | 'choosing' | 'won' | 'lost';
+  phase: 'playing' | 'choosing' | 'drafting' | 'won' | 'lost';
+  draftChoices: Record<string, CardId[]>;
   visitedRooms: string[];
   roomChoices: string[];
   hazards: TemporaryHazard[];
@@ -76,7 +81,7 @@ export type GameState = {
   revision: number;
 };
 export type GameAction =
-  { type: 'play'; card: number; target?: Position } | { type: 'end' } | { type: 'choose-room'; roomId: string };
+  { type: 'play'; card: number; target?: Position } | { type: 'end' } | { type: 'choose-room'; roomId: string } | { type: 'draft-card'; cardId: CardId };
 export type Member = {
   id: string;
   name: string;
