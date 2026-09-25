@@ -308,7 +308,7 @@ export async function createApp(
     socket.data.spectator = false;
     publish(room);
   }
-  app.get('/api/health', (_req, res) =>
+  app.get(['/api/health', '/healthz'], (_req, res) =>
     res.status(storage.healthy ? 200 : 503).json({
       ok: storage.healthy,
       storage: storage.storage,
