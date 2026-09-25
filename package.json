@@ -12,7 +12,8 @@
   "scripts": {
     "dev": "concurrently -k -n server,client \"npm run dev -w @chrono/server\" \"npm run dev -w @chrono/client\"",
     "build": "npm run typecheck && npm run build -w @chrono/client && npm run build -w @chrono/server",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.build.json",
+    "typecheck:all": "tsc --noEmit",
     "start": "npm run start -w @chrono/server",
     "test": "vitest run",
     "test:e2e": "playwright test",
