@@ -1,0 +1,24 @@
+# Review plan pricing before applying. The disk preserves SQLite scores.
+services:
+  - type: web
+    name: chrono-card
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    disk:
+      name: chrono-scores
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: 22.16.0
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: /var/data
+      - key: CLIENT_ORIGIN
+        sync: false
+      - key: REDIS_URL
+        sync: false

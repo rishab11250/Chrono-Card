@@ -1,0 +1,17 @@
+{
+  "buildCommand": "npm run build -w @chrono/client",
+  "outputDirectory": "packages/client/dist",
+  "installCommand": "npm ci",
+  "framework": null,
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ]
+}

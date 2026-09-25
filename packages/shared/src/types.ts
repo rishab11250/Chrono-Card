@@ -1,0 +1,112 @@
+export type Position = { x: number; y: number };
+export type CardId =
+  | 'step1'
+  | 'step2'
+  | 'dash'
+  | 'swap'
+  | 'strike'
+  | 'arrow'
+  | 'shield'
+  | 'redraw'
+  | 'boost'
+  | 'taunt';
+export type Card = {
+  id: CardId;
+  name: string;
+  category: 'move' | 'attack' | 'support';
+  icon: string;
+  description: string;
+  range: number;
+  coop?: boolean;
+};
+export type EnemyKind = 'turret' | 'patroller' | 'chaser';
+export type EnemyIntent = { attack: Position[]; move?: Position };
+export type Enemy = Position & {
+  id: string;
+  kind: EnemyKind;
+  hp: number;
+  heading: number;
+  intent: EnemyIntent;
+};
+export type Level = {
+  id: string;
+  name: string;
+  subtitle: string;
+  tiles: string[];
+  enemies: { kind: EnemyKind; x: number; y: number }[];
+};
+export type Player = Position & {
+  id: string;
+  name: string;
+  hp: number;
+  maxHp: number;
+  shield: number;
+  hand: CardId[];
+  deck: CardId[];
+  discard: CardId[];
+  bonus: number;
+  abandoned?: boolean;
+};
+export type Mode = 'solo' | 'duo' | 'party' | 'daily';
+export type GameState = {
+  mode: Mode;
+  seed: number;
+  rng: number;
+  level: number;
+  round: number;
+  turns: number;
+  active: number;
+  plays: number;
+  phase: 'playing' | 'won' | 'lost';
+  players: Player[];
+  enemies: Enemy[];
+  log: string[];
+  revision: number;
+};
+export type GameAction =
+  { type: 'play'; card: number; target?: Position } | { type: 'end' };
+export type Member = { id: string; name: string; connected: boolean };
+export type RoomView = {
+  code: string;
+  mode: Mode;
+  host: string;
+  members: Member[];
+  game: GameState | null;
+  spectators: number;
+  paused: boolean;
+  graceSeconds: number;
+};
+export type Session = { code: string; token: string; playerId: string };
+export type Reply<T = undefined> =
+  { ok: true; data: T } | { ok: false; error: string };
+export type LeaderboardEntry = {
+  name: string;
+  turns: number;
+  seconds: number;
+  date: string;
+};
+export interface ClientEvents {
+  'room:create': (
+    input: { name: string; mode: 'duo' | 'party' | 'daily' },
+    ack: (result: Reply<Session>) => void,
+  ) => void;
+  'room:join': (
+    input: { name: string; code: string },
+    ack: (result: Reply<Session>) => void,
+  ) => void;
+  'room:resume': (
+    input: Session,
+    ack: (result: Reply<Session>) => void,
+  ) => void;
+  'room:watch': (input: { code: string }, ack: (result: Reply) => void) => void;
+  'room:start': (ack: (result: Reply) => void) => void;
+  'room:leave': (ack: (result: Reply) => void) => void;
+  'game:action': (
+    input: { action: GameAction; revision: number },
+    ack: (result: Reply) => void,
+  ) => void;
+}
+export interface ServerEvents {
+  'room:state': (room: RoomView) => void;
+  'room:closed': (reason: string) => void;
+}

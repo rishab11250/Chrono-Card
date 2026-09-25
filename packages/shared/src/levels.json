@@ -1,0 +1,111 @@
+[
+  {
+    "id": "threshold",
+    "name": "The Threshold",
+    "subtitle": "Every escape begins with a single step.",
+    "tiles": [
+      "##########",
+      "#........#",
+      "#....#...#",
+      "#........#",
+      "#..#.....#",
+      "#..#..~..#",
+      "#........#",
+      "#.....#..#",
+      "#.......E#",
+      "##########"
+    ],
+    "enemies": [
+      { "kind": "patroller", "x": 6, "y": 3 },
+      { "kind": "turret", "x": 7, "y": 6 }
+    ]
+  },
+  {
+    "id": "cinder",
+    "name": "Cinder Passage",
+    "subtitle": "The floor remembers the fire.",
+    "tiles": [
+      "##########",
+      "#........#",
+      "#..~.....#",
+      "#..#..#..#",
+      "#.....~..#",
+      "#.~......#",
+      "#..#..#..#",
+      "#........#",
+      "#.......E#",
+      "##########"
+    ],
+    "enemies": [
+      { "kind": "chaser", "x": 6, "y": 4 },
+      { "kind": "turret", "x": 7, "y": 7 }
+    ]
+  },
+  {
+    "id": "archive",
+    "name": "The Lost Archive",
+    "subtitle": "Some things were never meant to be found.",
+    "tiles": [
+      "##########",
+      "#........#",
+      "#..#..#..#",
+      "#..#..#..#",
+      "#........#",
+      "#...~....#",
+      "#..#..#..#",
+      "#........#",
+      "#.......E#",
+      "##########"
+    ],
+    "enemies": [
+      { "kind": "patroller", "x": 5, "y": 4 },
+      { "kind": "chaser", "x": 7, "y": 6 },
+      { "kind": "turret", "x": 4, "y": 7 }
+    ]
+  },
+  {
+    "id": "clockwork",
+    "name": "Clockwork Hollow",
+    "subtitle": "Learn the pattern. Break the cycle.",
+    "tiles": [
+      "##########",
+      "#........#",
+      "#...~....#",
+      "#.#...#..#",
+      "#.....#..#",
+      "#..~.....#",
+      "#..#..~..#",
+      "#........#",
+      "#.......E#",
+      "##########"
+    ],
+    "enemies": [
+      { "kind": "turret", "x": 5, "y": 3 },
+      { "kind": "patroller", "x": 6, "y": 5 },
+      { "kind": "chaser", "x": 7, "y": 7 }
+    ]
+  },
+  {
+    "id": "heart",
+    "name": "Heart of the Hourglass",
+    "subtitle": "One last room. A little more borrowed time.",
+    "tiles": [
+      "##########",
+      "#........#",
+      "#..~..~..#",
+      "#..#..#..#",
+      "#........#",
+      "#.~....~.#",
+      "#..#..#..#",
+      "#........#",
+      "#.......E#",
+      "##########"
+    ],
+    "enemies": [
+      { "kind": "turret", "x": 5, "y": 4 },
+      { "kind": "chaser", "x": 7, "y": 5 },
+      { "kind": "patroller", "x": 4, "y": 7 },
+      { "kind": "chaser", "x": 7, "y": 7 }
+    ]
+  }
+]
