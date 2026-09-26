@@ -21,6 +21,8 @@ import {
   type Position,
   type RoomView,
   type UserProfile,
+  RELICS,
+  type RelicId,
 } from '@chrono/shared';
 import { API_URL, Network } from './net';
 import { icon } from './icons';
@@ -1004,7 +1006,9 @@ function render() {
       : game.phase === 'choosing'
         ? 'CHOOSE YOUR PATH'
         : game.phase === 'drafting'
-          ? 'CHOOSE A NEW CARD'
+          ? game.relicChoices?.[p.id]?.length
+            ? 'CHOOSE A RELIC'
+            : 'CHOOSE A NEW CARD'
           : game.phase !== 'playing'
             ? 'EXPEDITION COMPLETE'
             : room?.paused
@@ -1022,7 +1026,18 @@ function render() {
   $('#party').innerHTML = game.players
     .map(
       (player, i) =>
-        `<div class="party-member ${player.id === p.id ? 'current-player' : ''}"><div class="portrait player-${i}">${icon('explorer')}<span>${i + 1}</span></div><div class="party-details"><div><strong>${escape(player.name)}</strong><small>${player.hp <= 0 ? (player.abandoned ? 'LEFT' : 'FALLEN') : player.id === p.id ? 'ACTIVE' : 'READY'}</small></div><div class="hearts" aria-hidden="true">${Array.from({ length: 6 }, (_, heart) => `<span class="${player.hp > heart * 2 ? '' : 'empty-heart'}">${icon('heart')}</span>`).join('')}</div><div class="hp-label"><span>HP ${player.hp} <span>/ ${player.maxHp}</span></span><span>${player.shield ? '◇ Shielded' : 'Explorer'}</span></div></div></div>`,
+        `<div class="party-member ${player.id === p.id ? 'current-player' : ''}"><div class="portrait player-${i}">${icon('explorer')}<span>${i + 1}</span></div><div class="party-details"><div><strong>${escape(player.name)}</strong><small>${player.hp <= 0 ? (player.abandoned ? 'LEFT' : 'FALLEN') : player.id === p.id ? 'ACTIVE' : 'READY'}</small></div><div class="hearts" aria-hidden="true">${Array.from({ length: Math.ceil(player.maxHp / 2) }, (_, heart) => `<span class="${player.hp > heart * 2 ? '' : 'empty-heart'}">${icon('heart')}</span>`).join('')}</div><div class="hp-label"><span>HP ${player.hp} <span>/ ${player.maxHp}</span></span><span>${player.shield ? '◇ Shielded' : 'Explorer'}</span></div>${
+          player.relics?.length
+            ? `<div class="player-relics">${player.relics
+                .map((rId) => {
+                  const r = RELICS.find((x) => x.id === rId);
+                  return r
+                    ? `<span title="${escape(r.name)}">${r.icon}</span>`
+                    : '';
+                })
+                .join('')}</div>`
+            : ''
+        }</div></div>`,
     )
     .join('');
   $('#enemy-count').textContent = `${game.enemies.length}`.padStart(2, '0');
@@ -1277,6 +1292,34 @@ function renderProgression() {
   if (progressionModal === signature && modal.open) return;
   progressionModal = signature;
   if (game.phase === 'drafting') {
+    const pId = activePlayer(game).id;
+    if (game.relicChoices?.[pId]?.length) {
+      showModal(
+        'A gift from the ruins',
+        `<p>${escape(activePlayer(game).name)}: choose a relic to empower your journey. ${canDecide() ? '' : 'Waiting for their choice…'}</p><div class="relic-choices">${game.relicChoices[
+          pId
+        ]
+          .map((id) => {
+            const r = RELICS.find((x) => x.id === id)!;
+            return `<button class="relic-choice" data-relic="${id}" ${canDecide() ? '' : 'disabled'}><span class="relic-icon" aria-hidden="true">${r.icon}</span><strong>${escape(r.name)}</strong><p>${escape(r.description)}</p></button>`;
+          })
+          .join('')}</div>`,
+        'REWARD • CHOOSE ONE',
+      );
+      modal.querySelectorAll<HTMLButtonElement>('[data-relic]').forEach(
+        (button) =>
+          (button.onclick = () =>
+            void act({
+              type: 'pick-relic',
+              relicId: button.dataset.relic as RelicId,
+            })),
+      );
+      modal
+        .querySelector<HTMLButtonElement>('.relic-choice:not(:disabled)')
+        ?.focus();
+      return;
+    }
+
     showModal(
       'A gift from the ruins',
       `<p>${escape(activePlayer(game).name)}: choose one card to keep for this expedition. ${canDecide() ? '' : 'Waiting for their choice…'}</p><div class="progression-options draft-options">${(game.draftChoices[activePlayer(game).id] ?? []).map((id) => `<button class="progression-option" data-draft-card="${id}" ${canDecide() ? '' : 'disabled'}><span aria-hidden="true">${icon(id)}</span><strong>${escape(CARDS[id].name)}</strong><span>${escape(CARDS[id].description)}</span></button>`).join('')}</div>`,

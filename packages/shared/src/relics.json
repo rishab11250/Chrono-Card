@@ -1,0 +1,32 @@
+[
+  {
+    "id": "iron_heart",
+    "name": "Iron Heart",
+    "icon": "♥",
+    "description": "+2 max HP. Heals 2 HP on pickup."
+  },
+  {
+    "id": "swift_boots",
+    "name": "Swift Boots",
+    "icon": "⚡",
+    "description": "Start each room with +1 bonus play."
+  },
+  {
+    "id": "ember_shield",
+    "name": "Ember Shield",
+    "icon": "◇",
+    "description": "Start each room with a shield."
+  },
+  {
+    "id": "sharp_edge",
+    "name": "Sharp Edge",
+    "icon": "⚔",
+    "description": "Your attack cards deal +1 damage."
+  },
+  {
+    "id": "deep_pockets",
+    "name": "Deep Pockets",
+    "icon": "✦",
+    "description": "Draw 1 extra card each hand."
+  }
+]

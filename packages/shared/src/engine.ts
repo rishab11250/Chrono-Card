@@ -1,6 +1,7 @@
 import cardData from './cards.json';
 import enemyData from './enemies.json';
 import levelData from './levels.json';
+import relicData from './relics.json';
 import type {
   Card,
   CardId,
@@ -14,12 +15,16 @@ import type {
   Act,
   EnemyKind,
   PlayAction,
+  Relic,
+  StatusEffect,
+  StatusType,
 } from './types';
 
 export const CARDS = Object.fromEntries(
   cardData.map((card) => [card.id, card]),
 ) as Record<CardId, Card>;
 export const ENEMIES = enemyData;
+export const RELICS = relicData as Relic[];
 export const ACTS = levelData.acts as Act[];
 export const LEVELS: Level[] = ACTS.flatMap((act) =>
   act.rooms.map((lvl) => ({
@@ -104,7 +109,9 @@ const enemyAt = (s: GameState, p: Position) =>
   s.enemies.find((v) => same(v, p));
 function nearestLiving(living: Player[], pos: Position): Player | undefined {
   if (!living.length) return undefined;
-  return living.reduce((a, b) => (distance(pos, a) <= distance(pos, b) ? a : b));
+  return living.reduce((a, b) =>
+    distance(pos, a) <= distance(pos, b) ? a : b,
+  );
 }
 export const activePlayer = (s: GameState) => s.players[s.active];
 function note(s: GameState, message: string) {
@@ -140,7 +147,9 @@ function draw(s: GameState, p: Player) {
     }
     if (index >= 0) p.hand.push(...p.deck.splice(index, 1));
   }
-  while (p.hand.length < 5 && p.deck.length) p.hand.push(p.deck.shift()!);
+  const handSize = 5 + ((p.relics ?? []).includes('deep_pockets') ? 1 : 0);
+  while (p.hand.length < handSize && p.deck.length)
+    p.hand.push(p.deck.shift()!);
 }
 function hit(s: GameState, p: Player, damage: number) {
   if (p.shield > 0) {
@@ -153,6 +162,27 @@ function hit(s: GameState, p: Player, damage: number) {
 }
 function hazard(s: GameState, p: Player) {
   if (tileAt(s, p) === '~') hit(s, p, 1);
+}
+function applyStatus(
+  target: { statuses?: StatusEffect[] },
+  effect: StatusEffect,
+) {
+  target.statuses ??= [];
+  const existing = target.statuses.find((s) => s.type === effect.type);
+  if (existing) existing.rounds = Math.max(existing.rounds, effect.rounds);
+  else target.statuses.push({ ...effect });
+}
+function hasStatus(
+  target: { statuses?: StatusEffect[] },
+  type: StatusType,
+): boolean {
+  return (target.statuses ?? []).some((s) => s.type === type && s.rounds > 0);
+}
+function tickStatuses(target: { statuses?: StatusEffect[] }) {
+  if (!target.statuses) return;
+  target.statuses = target.statuses
+    .map((s) => ({ ...s, rounds: s.rounds - 1 }))
+    .filter((s) => s.rounds > 0);
 }
 function planEnemies(s: GameState) {
   const living = s.players.filter((p) => p.hp > 0);
@@ -249,6 +279,9 @@ function loadLevel(s: GameState) {
     p.hp = p.abandoned ? 0 : Math.min(p.maxHp, Math.max(3, p.hp + 3));
     p.shield = 0;
     p.bonus = 0;
+    const relics = p.relics ?? [];
+    if (relics.includes('swift_boots')) p.bonus += 1;
+    if (relics.includes('ember_shield')) p.shield = Math.max(p.shield, 1);
   });
   const spawnTiles: Position[] = [];
   const level = LEVELS[s.level];
@@ -392,7 +425,9 @@ function play(s: GameState, index: number, target?: Position) {
     if (!same(p, t) || !s.enemies.some((e) => distance(p, e) === 1))
       throw new Error('Stand beside an enemy and target yourself.');
     s.enemies.forEach((e) => {
-      if (distance(p, e) === 1) e.hp -= 2;
+      if (distance(p, e) === 1)
+        e.hp -=
+          2 + ((activePlayer(s).relics ?? []).includes('sharp_edge') ? 1 : 0);
     });
     s.enemies = s.enemies.filter((e) => e.hp > 0);
   } else if (id === 'forge') {
@@ -459,7 +494,8 @@ function play(s: GameState, index: number, target?: Position) {
         .some((v) => tileAt(s, v) === '#' || enemyAt(s, v) || livingAt(s, v))
     )
       throw new Error('Choose an enemy in clear range.');
-    enemy.hp -= id === 'strike_plus' ? 3 : id === 'quickshot' ? 1 : 2;
+    const bonus = (activePlayer(s).relics ?? []).includes('sharp_edge') ? 1 : 0;
+    enemy.hp -= (id === 'strike_plus' ? 3 : id === 'quickshot' ? 1 : 2) + bonus;
     s.enemies = s.enemies.filter((e) => e.hp > 0);
   } else if (id === 'shield') {
     if (!ally) throw new Error('Choose yourself or a living ally.');
@@ -473,6 +509,45 @@ function play(s: GameState, index: number, target?: Position) {
     if (!enemy) throw new Error('Choose an enemy to challenge.');
     if (enemy.kind === 'bomber') enemy.intent.hazard = [{ x: p.x, y: p.y }];
     else enemy.intent.attack = [{ x: p.x, y: p.y }];
+  } else if (id === 'shockwave') {
+    if (!same(p, t)) throw new Error('Target yourself to unleash the wave.');
+    const adjacent = s.enemies.filter((e) => distance(p, e) === 1);
+    if (!adjacent.length) throw new Error('No adjacent enemies to push.');
+    for (const e of adjacent) {
+      const dx = Math.sign(e.x - p.x);
+      const dy = Math.sign(e.y - p.y);
+      const dest = { x: e.x + dx, y: e.y + dy };
+      e.hp -= 1;
+      if (tileAt(s, dest) !== '#' && !enemyAt(s, dest) && !livingAt(s, dest)) {
+        Object.assign(e, dest);
+      }
+    }
+    s.enemies = s.enemies.filter((e) => e.hp > 0);
+  } else if (id === 'chain_spark') {
+    const path = straightPath(p, t);
+    if (
+      !enemy ||
+      !path.length ||
+      path.length > card.range ||
+      path
+        .slice(0, -1)
+        .some((v) => tileAt(s, v) === '#' || enemyAt(s, v) || livingAt(s, v))
+    )
+      throw new Error('Choose an enemy in clear range.');
+    enemy.hp -= 1;
+    note(s, `${ENEMIES[enemy.kind].name} is struck by chain spark.`);
+    for (const other of s.enemies) {
+      if (other.id !== enemy.id && distance(enemy, other) === 1) {
+        other.hp -= 1;
+        note(s, `Spark chains to ${ENEMIES[other.kind].name}!`);
+      }
+    }
+    s.enemies = s.enemies.filter((e) => e.hp > 0);
+  } else if (id === 'snare') {
+    if (!enemy || distance(p, t) > card.range)
+      throw new Error('Choose an enemy within range.');
+    applyStatus(enemy, { type: 'poison', rounds: 3 });
+    note(s, `${ENEMIES[enemy.kind].name} is poisoned!`);
   }
   p.hand.splice(index, 1);
   p.discard.push(id);
@@ -482,11 +557,22 @@ function play(s: GameState, index: number, target?: Position) {
   note(s, `${p.name} played ${card.name}.`);
 }
 function enemyTurn(s: GameState) {
+  for (const e of s.enemies) {
+    if (hasStatus(e, 'poison')) {
+      e.hp -= 1;
+      note(s, `${ENEMIES[e.kind].name} takes poison damage.`);
+    }
+  }
+  s.enemies = s.enemies.filter((e) => e.hp > 0);
   s.hazards = (s.hazards ?? []).filter(
     (hazard) => hazard.expiresRound > s.round + 1,
   );
   for (const e of s.enemies) {
     if (e.intent.charging) continue;
+    if (hasStatus(e, 'stun')) {
+      note(s, `${ENEMIES[e.kind].name} is stunned!`);
+      continue;
+    }
     for (const target of e.intent.hazard ?? []) {
       if (
         LEVELS[s.level].tiles[target.y]?.[target.x] !== '.' &&
@@ -513,6 +599,8 @@ function enemyTurn(s: GameState) {
   }
   s.round++;
   planEnemies(s);
+  for (const e of s.enemies) tickStatuses(e);
+  for (const p of s.players.filter((p) => p.hp > 0)) tickStatuses(p);
 }
 function advance(s: GameState) {
   let next = s.players.findIndex((p, i) => i > s.active && p.hp > 0);
@@ -530,17 +618,25 @@ function advance(s: GameState) {
   const p = activePlayer(s);
   s.plays = 2 + p.bonus;
   p.bonus = 0;
+  if (hasStatus(p, 'poison')) {
+    hit(s, p, 1);
+    note(s, `${p.name} takes poison damage.`);
+  }
+  tickStatuses(p);
   draw(s, p);
 }
 function finishDraft(s: GameState) {
   const next = s.players.findIndex(
-    (p) => !p.abandoned && s.draftChoices[p.id]?.length,
+    (p) =>
+      !p.abandoned &&
+      (s.draftChoices[p.id]?.length || s.relicChoices?.[p.id]?.length),
   );
   if (next >= 0) {
     s.active = next;
     return;
   }
   s.draftChoices = {};
+  s.relicChoices = undefined;
   const choices = nextRoomIds(s);
   if (choices.length > 1) {
     s.phase = 'choosing';
@@ -574,6 +670,17 @@ function checkOutcome(s: GameState) {
           .filter((p) => !p.abandoned)
           .map((p) => [p.id, shuffle(s, [...pool]).slice(0, 3)]),
       );
+      s.relicChoices = Object.fromEntries(
+        s.players
+          .filter((p) => !p.abandoned)
+          .map((p) => {
+            const owned = p.relics ?? [];
+            const available = RELICS.filter((r) => !owned.includes(r.id)).map(
+              (r) => r.id,
+            );
+            return [p.id, shuffle(s, [...available]).slice(0, 2)];
+          }),
+      );
       finishDraft(s);
       note(s, 'Room cleared. Each explorer may keep one new card.');
     }
@@ -591,6 +698,24 @@ export function applyAction(
   const s = structuredClone(state);
   if (s.phase === 'drafting') {
     const p = activePlayer(s);
+    if (action.type === 'pick-relic') {
+      if (!s.relicChoices?.[p.id]?.includes(action.relicId))
+        throw new Error('Choose one of your offered relics.');
+      p.relics ??= [];
+      p.relics.push(action.relicId);
+      delete s.relicChoices[p.id];
+      if (action.relicId === 'iron_heart') {
+        p.maxHp += 2;
+        p.hp = Math.min(p.maxHp, p.hp + 2);
+      }
+      note(
+        s,
+        `${p.name} acquired ${RELICS.find((r) => r.id === action.relicId)!.name}.`,
+      );
+      finishDraft(s);
+      s.revision++;
+      return s;
+    }
     if (
       action.type !== 'draft-card' ||
       !s.draftChoices[p.id]?.includes(action.cardId)
@@ -638,7 +763,10 @@ export function previewSimultaneousTurn(
   s.plays = 2 + s.players[index].bonus;
   s.players[index].bonus = 0;
   s.rng = (state.rng ^ Math.imul(index + 1, 0x9e3779b9)) >>> 0;
-  const planned = actions.map(a => ({ cardId: s.players[index].hand[a.card], target: a.target }));
+  const planned = actions.map((a) => ({
+    cardId: s.players[index].hand[a.card],
+    target: a.target,
+  }));
   for (const action of planned) {
     if (activePlayer(s).hp <= 0) throw new Error('This explorer has fallen.');
     const idx = activePlayer(s).hand.indexOf(action.cardId);
@@ -672,7 +800,9 @@ export function resolveSimultaneousRound(
     s.active = index;
     s.plays = budgets[index];
     s.rng = (state.rng ^ Math.imul(index + 1, 0x9e3779b9)) >>> 0;
-    const planned = plan.slice(0, 32).map(a => ({ cardId: activePlayer(s).hand[a.card], target: a.target }));
+    const planned = plan
+      .slice(0, 32)
+      .map((a) => ({ cardId: activePlayer(s).hand[a.card], target: a.target }));
     for (const action of planned) {
       if (activePlayer(s).hp <= 0) break;
       const idx = activePlayer(s).hand.indexOf(action.cardId);

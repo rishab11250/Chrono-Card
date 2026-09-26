@@ -9,12 +9,22 @@ import {
   activePlayer,
   type GameState,
 } from '@chrono/shared';
-function draftAll(s: GameState) {
-  while (s.phase === 'drafting')
-    s = applyAction(s, activePlayer(s).id, {
-      type: 'draft-card',
-      cardId: s.draftChoices[activePlayer(s).id][0],
-    });
+function draftAll(state: GameState) {
+  let s = state;
+  while (s.phase === 'drafting') {
+    const pId = activePlayer(s).id;
+    if (s.relicChoices?.[pId]?.length) {
+      s = applyAction(s, pId, {
+        type: 'pick-relic',
+        relicId: s.relicChoices[pId][0],
+      });
+    } else {
+      s = applyAction(s, pId, {
+        type: 'draft-card',
+        cardId: s.draftChoices[pId][0],
+      });
+    }
+  }
   return s;
 }
 function atExit() {

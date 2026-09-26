@@ -2308,3 +2308,48 @@ th {
   text-align: center;
   line-height: 1.3;
 }
+
+.relic-choices {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+.relic-choice {
+  background: #3a3556;
+  border: 2px solid #6b5f8a;
+  padding: 12px;
+  color: #e5d9ba;
+  cursor: pointer;
+  flex: 1;
+  min-width: 140px;
+  text-align: center;
+  transition: border-color 0.15s;
+}
+.relic-choice:hover {
+  border-color: #b58bca;
+}
+.relic-choice .relic-icon {
+  font-size: 28px;
+  display: block;
+  margin-bottom: 6px;
+}
+.relic-choice strong {
+  display: block;
+  font-size: 18px;
+  margin-bottom: 4px;
+}
+.relic-choice p {
+  font-size: 14px;
+  margin: 0;
+  opacity: 0.8;
+}
+.player-relics {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+.player-relics span {
+  font-size: 14px;
+  opacity: 0.9;
+}

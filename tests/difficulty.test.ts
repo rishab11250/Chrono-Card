@@ -69,11 +69,20 @@ describe('Act threat budgets', () => {
     s.enemies = [];
     Object.assign(s.players[0], { x: 8, y: 8 });
     s = applyAction(s, 'a', { type: 'end' });
-    while (s.phase === 'drafting')
-      s = applyAction(s, activePlayer(s).id, {
-        type: 'draft-card',
-        cardId: s.draftChoices[activePlayer(s).id][0],
-      });
+    while (s.phase === 'drafting') {
+      const pId = activePlayer(s).id;
+      if (s.relicChoices?.[pId]?.length) {
+        s = applyAction(s, pId, {
+          type: 'pick-relic',
+          relicId: s.relicChoices[pId][0],
+        });
+      } else {
+        s = applyAction(s, pId, {
+          type: 'draft-card',
+          cardId: s.draftChoices[pId][0],
+        });
+      }
+    }
     s = applyAction(s, 'a', { type: 'choose-room', roomId: s.roomChoices[0] });
     expect(s.enemies.reduce((n, e) => n + ENEMIES[e.kind].threat, 0)).toBe(
       roomThreatBudget(LEVELS[s.level], 1),

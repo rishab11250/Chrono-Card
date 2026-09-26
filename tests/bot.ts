@@ -118,11 +118,19 @@ function candidates(s: GameState): { state: GameState; action: GameAction }[] {
 export function chooseAction(s: GameState): GameAction {
   if (s.phase === 'choosing')
     return { type: 'choose-room', roomId: s.roomChoices[0] };
-  if (s.phase === 'drafting')
+  if (s.phase === 'drafting') {
+    const pId = activePlayer(s).id;
+    if (s.relicChoices?.[pId]?.length) {
+      return {
+        type: 'pick-relic',
+        relicId: s.relicChoices[pId][0],
+      };
+    }
     return {
       type: 'draft-card',
-      cardId: s.draftChoices[activePlayer(s).id][0],
+      cardId: s.draftChoices[pId][0],
     };
+  }
   const options = candidates(s);
   if (!options.length) return { type: 'end' };
   const base = score(s);

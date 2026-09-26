@@ -449,6 +449,9 @@ sprites.bomber = [
   '........................',
   '........................',
 ];
+sprites.shockwave = sprites.cleave;
+sprites.chain_spark = sprites.arrow;
+sprites.snare = sprites.taunt;
 export function pixelSvg(name: string) {
   const rows = sprites[name] ?? sprites.explorer;
   return `<svg class="pixel-sprite" viewBox="0 0 ${Math.max(...rows.map((r) => r.length))} ${rows.length}" shape-rendering="crispEdges" aria-hidden="true">${rows.flatMap((row, y) => [...row].map((p, x) => (palette[p] ? `<rect x="${x}" y="${y}" width="1" height="1" fill="${palette[p]}"/>` : ''))).join('')}</svg>`;

@@ -8,6 +8,7 @@ describe('browser save recovery', () => {
     const older = JSON.parse(JSON.stringify(s));
     delete older.hazards;
     delete older.draftChoices;
+    delete older.relicChoices;
     delete older.visitedRooms;
     delete older.roomChoices;
     expect(restoreLocalGame(older)).toMatchObject({
@@ -40,6 +41,10 @@ describe('browser save recovery', () => {
     Object.assign(s.players[0], { x: 8, y: 8 });
     s = applyAction(s, 'a', { type: 'end' });
     expect(restoreLocalGame(s)).toEqual(s);
+    s = applyAction(s, 'a', {
+      type: 'pick-relic',
+      relicId: s.relicChoices!.a[0],
+    });
     s = applyAction(s, 'a', {
       type: 'draft-card',
       cardId: s.draftChoices.a[0],

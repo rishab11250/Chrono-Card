@@ -1,5 +1,32 @@
 [
   {
+    "id": "shockwave",
+    "name": "Shockwave",
+    "category": "attack",
+    "icon": "◈",
+    "description": "Target yourself: push all adjacent enemies 1 tile back and deal 1 damage.",
+    "range": 0,
+    "draft": true
+  },
+  {
+    "id": "chain_spark",
+    "name": "Chain spark",
+    "category": "attack",
+    "icon": "⚡",
+    "description": "Deal 1 damage to an enemy within 2 tiles, plus 1 to each of its neighbors.",
+    "range": 2,
+    "draft": true
+  },
+  {
+    "id": "snare",
+    "name": "Chrono snare",
+    "category": "support",
+    "icon": "⊘",
+    "description": "Poison an enemy within 2 tiles: 1 damage per round for 3 rounds.",
+    "range": 2,
+    "draft": true
+  },
+  {
     "id": "blink",
     "name": "Rift hop",
     "category": "move",

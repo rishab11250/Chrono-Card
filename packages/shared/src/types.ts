@@ -1,5 +1,10 @@
+export type StatusType = 'poison' | 'stun';
+export type StatusEffect = { type: StatusType; rounds: number };
 export type Position = { x: number; y: number };
 export type CardId =
+  | 'shockwave'
+  | 'chain_spark'
+  | 'snare'
   | 'step1'
   | 'step2'
   | 'dash'
@@ -48,6 +53,7 @@ export type Enemy = Position & {
   hp: number;
   heading: number;
   intent: EnemyIntent;
+  statuses?: StatusEffect[];
 };
 export type Level = {
   actId: string;
@@ -73,6 +79,14 @@ export type Act = {
   };
   rooms: Omit<Level, 'width' | 'height' | 'actId'>[];
 };
+export type RelicId =
+  'iron_heart' | 'swift_boots' | 'ember_shield' | 'sharp_edge' | 'deep_pockets';
+export type Relic = {
+  id: RelicId;
+  name: string;
+  icon: string;
+  description: string;
+};
 export type Player = Position & {
   id: string;
   name: string;
@@ -85,6 +99,8 @@ export type Player = Position & {
   bonus: number;
   cooldowns?: Partial<Record<CardId, number>>;
   abandoned?: boolean;
+  relics?: RelicId[];
+  statuses?: StatusEffect[];
 };
 export type TurnOrder = 'alternating' | 'simultaneous';
 export type Mode = 'solo' | 'duo' | 'party' | 'daily';
@@ -100,6 +116,7 @@ export type GameState = {
   plays: number;
   phase: 'playing' | 'choosing' | 'drafting' | 'won' | 'lost';
   draftChoices: Record<string, CardId[]>;
+  relicChoices?: Record<string, RelicId[]>;
   visitedRooms: string[];
   roomChoices: string[];
   hazards: TemporaryHazard[];
@@ -114,7 +131,8 @@ export type GameAction =
   | { type: 'submit-turn'; actions: PlayAction[] }
   | { type: 'end' }
   | { type: 'choose-room'; roomId: string }
-  | { type: 'draft-card'; cardId: CardId };
+  | { type: 'draft-card'; cardId: CardId }
+  | { type: 'pick-relic'; relicId: RelicId };
 export type Member = {
   id: string;
   name: string;

@@ -33,18 +33,29 @@ describe('seeded expedition draft', () => {
       offers.forEach((id) => expect(CARDS[id].draft).toBe(true));
     }
     expect(() =>
-      applyAction(s, 'b', { type: 'draft-card', cardId: s.draftChoices.b[0] }),
+      applyAction(s, 'b', {
+        type: 'pick-relic',
+        relicId: s.relicChoices!.b[0],
+      }),
     ).toThrow('turn');
     expect(() =>
       applyAction(s, 'a', { type: 'draft-card', cardId: 'strike_plus' }),
     ).toThrow('offered');
-    const id = s.draftChoices.a[0],
-      next = applyAction(s, 'a', { type: 'draft-card', cardId: id });
+    const id = s.draftChoices.a[0];
+    let next = applyAction(s, 'a', {
+      type: 'pick-relic',
+      relicId: s.relicChoices!.a[0],
+    });
+    next = applyAction(next, 'a', { type: 'draft-card', cardId: id });
     expect(next.players[0].discard).toContain(id);
     expect(activePlayer(next).id).toBe('b');
     expect(() =>
       applyAction(next, 'a', { type: 'draft-card', cardId: id }),
     ).toThrow('turn');
+    next = applyAction(next, 'b', {
+      type: 'pick-relic',
+      relicId: next.relicChoices!.b[0],
+    });
     expect(
       applyAction(next, 'b', {
         type: 'draft-card',
@@ -58,10 +69,14 @@ describe('seeded expedition draft', () => {
     expect(next.phase).toBe('drafting');
     expect(next.round).toBe(s.round);
     expect(activePlayer(next).id).toBe('b');
+    const bNext = applyAction(next, 'b', {
+      type: 'pick-relic',
+      relicId: next.relicChoices!.b[0],
+    });
     expect(
-      applyAction(next, 'b', {
+      applyAction(bNext, 'b', {
         type: 'draft-card',
-        cardId: next.draftChoices.b[0],
+        cardId: bNext.draftChoices.b[0],
       }).phase,
     ).toBe('choosing');
   });

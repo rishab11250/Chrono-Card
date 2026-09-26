@@ -91,7 +91,7 @@ const actionSchema = z
               z
                 .object({
                   type: z.literal('play'),
-                  card: z.number().int().min(0).max(4),
+                  card: z.number().int().min(0).max(6),
                   target: z
                     .object({
                       x: z.number().int().min(0).max(30),
@@ -119,8 +119,20 @@ const actionSchema = z
         .strict(),
       z
         .object({
+          type: z.literal('pick-relic'),
+          relicId: z.enum([
+            'iron_heart',
+            'swift_boots',
+            'ember_shield',
+            'sharp_edge',
+            'deep_pockets',
+          ]),
+        })
+        .strict(),
+      z
+        .object({
           type: z.literal('play'),
-          card: z.number().int().min(0).max(4),
+          card: z.number().int().min(0).max(6),
           target: z
             .object({
               x: z.number().int().min(0).max(30),
@@ -879,7 +891,7 @@ export async function createApp(
             ok: false,
             error:
               error instanceof z.ZodError
-                ? 'Please check the name, code, or action.'
+                ? error.issues[0].message + ' ' + error.issues[0].path.join('.')
                 : error instanceof Error
                   ? error.message
                   : 'Unable to complete that action.',
@@ -1032,7 +1044,8 @@ export async function createApp(
         ) {
           if (
             data.action.type === 'choose-room' ||
-            data.action.type === 'draft-card'
+            data.action.type === 'draft-card' ||
+            data.action.type === 'pick-relic'
           )
             throw new Error('No progression choice is pending.');
           if (room.pendingActions.has(member.id))
