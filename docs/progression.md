@@ -16,6 +16,12 @@ Clear all enemies and reach the exit to begin rewards. Each non-abandoned explor
 - Socket requests retain revision checks and strict validation. Intermission choices bypass simultaneous combat queues and resolve through `applyAction`, just like local play. Spectators see choices but cannot submit them.
 - A forfeiting chooser hands control to another eligible explorer without advancing the enemy round. Closing a choice dialog does not skip rewards: the command deck provides a reopen button. Local saves retain a pending draft or route choice across refresh.
 
+## Simultaneous planning
+
+Each living explorer previews their own two-play turn locally, can reset it, and submits one ordered `submit-turn` plan. The server validates plans against the canonical round, persists submitted plans, and resolves them in party order only when every remaining explorer has submitted. Refresh preserves a submitted plan. A forfeiting explorer no longer blocks resolution.
+
+Each explorer has a deterministic per-round planning RNG, so redraw previews match resolution regardless of submission order. A card blocked by an earlier explorer's resolved plan is discarded and consumes its play cost; later card indices remain aligned. Boosts earned this round apply next round. Draft and route choices remain immediate authoritative actions, not queued plans.
+
 ## Enemy warning contract
 
 Every fresh attack is shown for at least a full party round before resolution. Attack coordinates stay fixed during the warning (the existing Challenge card explicitly redirects a warning).

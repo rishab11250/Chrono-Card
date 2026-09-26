@@ -65,9 +65,11 @@ it('persists user accounts across database restarts', async () => {
   }
 });
 
-it.skipIf(!process.env.TEST_REDIS_URL)(
-  'recovers authoritative rooms and private sessions after a server restart using Redis',
-  async () => {
+it
+  .skipIf(!process.env.TEST_REDIS_URL)
+  .each(['alternating', 'simultaneous'] as const)(
+  'recovers %s rooms, submitted plans, and private sessions after a server restart using Redis',
+  async (turnOrder) => {
     const options = {
       database: ':memory:',
       redisUrl: process.env.TEST_REDIS_URL,
@@ -101,6 +103,7 @@ it.skipIf(!process.env.TEST_REDIS_URL)(
       const created = await host.emitWithAck('room:create', {
         name: 'Persistent host',
         mode: 'duo',
+        turnOrder,
       });
       if (!created.ok) throw new Error(created.error);
       const joined = await guest.emitWithAck('room:join', {
@@ -131,10 +134,13 @@ it.skipIf(!process.env.TEST_REDIS_URL)(
       ).toBe(true);
       await expect.poll(() => state?.paused).toBe(false);
       expect(state?.game).toEqual(before);
+      expect(state?.submittedPlayers).toEqual(
+        turnOrder === 'simultaneous' ? [created.data.playerId] : [],
+      );
       expect(
         (
           await resumedGuest.emitWithAck('game:action', {
-            revision: 1,
+            revision: before!.revision,
             action: { type: 'end' },
           })
         ).ok,

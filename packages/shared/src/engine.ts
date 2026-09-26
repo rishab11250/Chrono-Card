@@ -13,6 +13,7 @@ import type {
   TurnOrder,
   Act,
   EnemyKind,
+  PlayAction,
 } from './types';
 
 export const CARDS = Object.fromEntries(
@@ -613,28 +614,84 @@ export function applyAction(
   s.revision++;
   return s;
 }
+/** Preview a whole plan without advancing enemies, room progression, or the shared revision. */
+export function previewSimultaneousTurn(
+  state: GameState,
+  playerId: string,
+  actions: PlayAction[],
+): GameState {
+  if (state.phase !== 'playing' || state.turnOrder !== 'simultaneous')
+    throw new Error('No simultaneous turn is pending.');
+  const s = structuredClone(state),
+    index = s.players.findIndex(
+      (p) => p.id === playerId && p.hp > 0 && !p.abandoned,
+    );
+  if (index < 0) throw new Error('Only living explorers can submit a turn.');
+  if (actions.length > 32)
+    throw new Error('A plan may contain at most 32 card plays.');
+  s.active = index;
+  s.plays = 2 + s.players[index].bonus;
+  s.players[index].bonus = 0;
+  s.rng = (state.rng ^ Math.imul(index + 1, 0x9e3779b9)) >>> 0;
+  for (const action of actions) {
+    if (activePlayer(s).hp <= 0) throw new Error('This explorer has fallen.');
+    play(s, action.card, action.target);
+  }
+  return s;
+}
 export function resolveSimultaneousRound(
   state: GameState,
   actions: { playerId: string; action: GameAction }[],
 ): GameState {
   if (state.phase !== 'playing') throw new Error('This expedition has ended.');
-  const s = structuredClone(state);
-  for (const { playerId, action } of actions) {
-    const index = s.players.findIndex((p) => p.id === playerId);
-    if (index < 0 || s.players[index].hp <= 0) continue;
+  let s = structuredClone(state);
+  const budgets = s.players.map((p) => 2 + p.bonus);
+  s.players.forEach((p) => {
+    p.bonus = 0;
+  });
+  // Resolve in party order, independently of packet arrival order.
+  for (let index = 0; index < s.players.length; index++) {
+    const player = s.players[index];
+    if (player.hp <= 0 || player.abandoned) continue;
+    const submitted = actions.find(
+      (item) => item.playerId === player.id,
+    )?.action;
+    const plan =
+      submitted?.type === 'submit-turn'
+        ? submitted.actions
+        : submitted?.type === 'play'
+          ? [submitted]
+          : [];
     s.active = index;
-    if (action.type === 'play') {
+    s.plays = budgets[index];
+    s.rng = (state.rng ^ Math.imul(index + 1, 0x9e3779b9)) >>> 0;
+    for (const action of plan.slice(0, 32)) {
+      if (activePlayer(s).hp <= 0) break;
       try {
-        play(s, action.card, action.target);
+        const candidate = structuredClone(s);
+        play(candidate, action.card, action.target);
+        s = candidate;
       } catch {
-        /* Illegal simultaneous candidate skipped gracefully */
+        // A collision spends/discards that card so later planned hand indices stay valid.
+        const p = activePlayer(s),
+          id = p.hand[action.card];
+        if (id) {
+          p.hand.splice(action.card, 1);
+          p.discard.push(id);
+          s.plays = Math.max(0, s.plays - (CARDS[id].cost ?? 1));
+        }
+        note(s, `${player.name}'s planned card no longer has a valid target.`);
       }
     }
+  }
+  checkOutcome(s);
+  if (s.phase !== 'playing') {
+    s.revision++;
+    return s;
   }
   enemyTurn(s);
   s.players.forEach((p) => {
     if (p.hp > 0) {
-      p.bonus = 0;
       draw(s, p);
     }
   });
@@ -659,6 +716,8 @@ export function abandonPlayer(state: GameState, playerId: string): GameState {
   else if (activePlayer(s).id === playerId) {
     if (s.phase === 'drafting') finishDraft(s);
     else if (s.phase === 'choosing')
+      s.active = s.players.findIndex((p) => p.hp > 0);
+    else if (s.turnOrder === 'simultaneous')
       s.active = s.players.findIndex((p) => p.hp > 0);
     else advance(s);
   }

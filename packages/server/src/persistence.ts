@@ -34,9 +34,25 @@ export async function persistence(
       'CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, salt TEXT NOT NULL, avatar TEXT NOT NULL, created_at TEXT NOT NULL, runs_played INTEGER DEFAULT 0, runs_won INTEGER DEFAULT 0, daily_wins INTEGER DEFAULT 0, best_turns INTEGER DEFAULT 999999); ' +
       'CREATE INDEX IF NOT EXISTS users_username ON users(username COLLATE NOCASE);',
   );
+  db.exec(
+    'CREATE TABLE IF NOT EXISTS recorded_runs (user_id TEXT NOT NULL, run_id TEXT NOT NULL, PRIMARY KEY (user_id,run_id))',
+  );
+  // The API treats usernames as case-insensitive; enforce the same rule atomically.
+  try {
+    db.exec(
+      'CREATE UNIQUE INDEX IF NOT EXISTS users_username_unique ON users(username COLLATE NOCASE)',
+    );
+  } catch (error) {
+    db.close();
+    throw new Error(
+      'Account migration requires unique usernames ignoring case. Back up SQLite and resolve duplicate accounts before restarting.',
+      { cause: error },
+    );
+  }
   const redis = options.redisUrl
     ? createClient({
         url: options.redisUrl,
+        disableOfflineQueue: true,
         socket: {
           connectTimeout: 5000,
           reconnectStrategy: (retries) => Math.min(retries * 200, 3000),
@@ -46,9 +62,40 @@ export async function persistence(
   redis?.on('error', (err: Error) =>
     console.error('Redis connection error:', err.message),
   );
-  if (redis) await redis.connect();
+  if (redis) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        redis.connect(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error('Redis connection timed out.')),
+            10_000,
+          );
+        }),
+      ]);
+    } catch (error) {
+      if (redis.isOpen) redis.destroy();
+      db.close();
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
   let writes: Promise<unknown> = Promise.resolve();
   let writeFailed = false;
+  let closed = false;
+  function queueWrite(work: () => Promise<unknown>) {
+    writes = writes
+      .then(work)
+      .then(() => {
+        writeFailed = false;
+      })
+      .catch((error: Error) => {
+        writeFailed = true;
+        console.error('Persistence write failed:', error.message);
+      });
+  }
   return {
     get storage() {
       return redis ? 'redis' : 'memory';
@@ -62,15 +109,7 @@ export async function persistence(
     save(code: string, value: unknown) {
       if (!redis) return;
       const json = JSON.stringify(value);
-      writes = writes
-        .then(() => redis.set(`chrono:room:${code}`, json, { EX: 7200 }))
-        .then(() => {
-          writeFailed = false;
-        })
-        .catch((err: Error) => {
-          writeFailed = true;
-          console.error('Room persistence failed:', err.message);
-        });
+      queueWrite(() => redis.set(`chrono:room:${code}`, json, { EX: 7200 }));
     },
     score(
       run: string,
@@ -104,8 +143,11 @@ export async function persistence(
       date: string,
     ) {
       db.prepare(
-        'INSERT OR REPLACE INTO ghosts (id, seed, mode, actions_json, name, date) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO ghosts (id, seed, mode, actions_json, name, date) VALUES (?, ?, ?, ?, ?, ?)',
       ).run(id, seed, mode, actionsJson, name, date);
+      db.exec(
+        'DELETE FROM ghosts WHERE rowid NOT IN (SELECT rowid FROM ghosts ORDER BY rowid DESC LIMIT 1000)',
+      );
     },
     getGhosts() {
       return db
@@ -154,7 +196,7 @@ export async function persistence(
         user.created_at,
       );
       if (redis) {
-        writes = writes.then(() =>
+        queueWrite(() =>
           redis.set(
             `chrono:user:${user.username.toLowerCase()}`,
             JSON.stringify(record),
@@ -176,7 +218,7 @@ export async function persistence(
           if (cached) {
             const user = JSON.parse(cached) as StoredUser;
             db.prepare(
-              'INSERT OR REPLACE INTO users (id, username, password_hash, salt, avatar, created_at, runs_played, runs_won, daily_wins, best_turns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+              'INSERT OR IGNORE INTO users (id, username, password_hash, salt, avatar, created_at, runs_played, runs_won, daily_wins, best_turns) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             ).run(
               user.id,
               user.username,
@@ -207,7 +249,7 @@ export async function persistence(
       const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as
         StoredUser | undefined;
       if (user && redis) {
-        writes = writes.then(() =>
+        queueWrite(() =>
           redis.set(
             `chrono:user:${user.username.toLowerCase()}`,
             JSON.stringify(user),
@@ -218,6 +260,7 @@ export async function persistence(
     updateUserStats(
       id: string,
       update: { won?: boolean; turns?: number; daily?: boolean },
+      runId?: string,
     ): StoredUser | null {
       const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as
         StoredUser | undefined;
@@ -230,9 +273,27 @@ export async function persistence(
         update.won && update.turns
           ? Math.min(user.best_turns, update.turns)
           : user.best_turns;
-      db.prepare(
-        'UPDATE users SET runs_played = ?, runs_won = ?, daily_wins = ?, best_turns = ? WHERE id = ?',
-      ).run(runs_played, runs_won, daily_wins, best_turns, id);
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        if (
+          runId &&
+          db
+            .prepare(
+              'INSERT OR IGNORE INTO recorded_runs (user_id,run_id) VALUES (?,?)',
+            )
+            .run(id, runId).changes === 0
+        ) {
+          db.exec('COMMIT');
+          return user;
+        }
+        db.prepare(
+          'UPDATE users SET runs_played = ?, runs_won = ?, daily_wins = ?, best_turns = ? WHERE id = ?',
+        ).run(runs_played, runs_won, daily_wins, best_turns, id);
+        db.exec('COMMIT');
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
       const updated: StoredUser = {
         ...user,
         runs_played,
@@ -241,7 +302,7 @@ export async function persistence(
         best_turns,
       };
       if (redis) {
-        writes = writes.then(() =>
+        queueWrite(() =>
           redis.set(
             `chrono:user:${user.username.toLowerCase()}`,
             JSON.stringify(updated),
@@ -251,9 +312,15 @@ export async function persistence(
       return updated;
     },
     async close() {
-      await writes;
-      if (redis) await redis.quit();
-      db.close();
+      if (closed) return;
+      closed = true;
+      try {
+        await writes;
+        if (redis?.isReady) await redis.quit();
+      } finally {
+        if (redis?.isOpen) redis.destroy();
+        db.close();
+      }
     },
   };
 }

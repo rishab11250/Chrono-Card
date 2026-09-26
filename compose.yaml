@@ -4,6 +4,7 @@ services:
     ports: ['3001:3001']
     environment:
       PORT: 3001
+      AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET to a random secret of at least 32 bytes}
       CLIENT_ORIGIN: http://localhost:3001
       REDIS_URL: redis://redis:6379
       DATA_DIR: /app/data

@@ -16,6 +16,10 @@ services:
         value: 22.16.0
       - key: NODE_ENV
         value: production
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: TRUST_PROXY_HOPS
+        value: 1
       - key: DATA_DIR
         value: /var/data
       - key: CLIENT_ORIGIN

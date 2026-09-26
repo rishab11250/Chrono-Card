@@ -5,6 +5,7 @@ import {
   activePlayer,
   ACTS,
   applyAction,
+  previewSimultaneousTurn,
   CARDS,
   createGame,
   ENEMIES,
@@ -13,6 +14,7 @@ import {
   same,
   tileAt,
   type GameAction,
+  type PlayAction,
   type CardId,
   type GameState,
   type LeaderboardEntry,
@@ -23,6 +25,7 @@ import {
 import { API_URL, Network } from './net';
 import { icon } from './icons';
 import { auth } from './auth';
+import { restoreLocalGame, validAction } from './saved-state';
 
 type Board = {
   update: (state: GameState, targets: Position[]) => void;
@@ -77,7 +80,20 @@ function loadAchievements(): Record<
   { unlocked: boolean; date?: string }
 > {
   try {
-    return JSON.parse(localStorage.getItem('chrono-achievements') ?? '{}');
+    const data = JSON.parse(
+      localStorage.getItem('chrono-achievements') ?? '{}',
+    );
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return {};
+    return Object.fromEntries(
+      Object.entries(data).filter(
+        ([, value]) =>
+          value &&
+          typeof value === 'object' &&
+          'unlocked' in value &&
+          typeof value.unlocked === 'boolean' &&
+          (!('date' in value) || typeof value.date === 'string'),
+      ),
+    ) as Record<string, { unlocked: boolean; date?: string }>;
   } catch {
     return {};
   }
@@ -127,7 +143,7 @@ function showAchievements() {
       <div>
         <strong>${escape(a.name)}</strong>
         <p>${escape(a.description)}</p>
-        ${state?.unlocked ? `<small>Unlocked ${state.date ?? ''}</small>` : ''}
+        ${state?.unlocked ? `<small>Unlocked ${escape(state.date ?? '')}</small>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -181,22 +197,26 @@ function handTargets(): Position[][] {
   return handTargetCache.targets;
 }
 let busy = false;
+let plannedActions: PlayAction[] = [];
+let planningRevision = -1;
+function isPlanning() {
+  return Boolean(
+    room?.game?.turnOrder === 'simultaneous' &&
+    room.game.phase === 'playing' &&
+    net.session &&
+    room.game.players.some(
+      (p) => p.id === net.session!.playerId && p.hp > 0 && !p.abandoned,
+    ),
+  );
+}
 let sound = false;
 let connection = 'Local expedition';
 const seed = () => crypto.getRandomValues(new Uint32Array(1))[0];
 try {
-  const saved = JSON.parse(
-    localStorage.getItem('chrono-local-v1') ?? 'null',
-  ) as GameState | null;
-  game =
-    saved &&
-    (saved.mode === 'solo' || saved.mode === 'duo') &&
-    saved.players?.length &&
-    saved.level >= 0 &&
-    saved.level < LEVELS.length &&
-    Number.isInteger(saved.rng)
-      ? saved
-      : createGame('solo', [{ id: 'local-1', name: 'You' }], seed());
+  const saved = restoreLocalGame(
+    JSON.parse(localStorage.getItem('chrono-local-v1') ?? 'null'),
+  );
+  game = saved ?? createGame('solo', [{ id: 'local-1', name: 'You' }], seed());
 } catch {
   game = createGame('solo', [{ id: 'local-1', name: 'You' }], seed());
 }
@@ -300,10 +320,57 @@ let isGhostMode = false;
 let ghostReplayActions: GameAction[] = [];
 let ghostActionIndex = 0;
 let ghostPlaying = false;
+let runRecordId = crypto.randomUUID();
+try {
+  const meta = JSON.parse(
+    localStorage.getItem('chrono-local-meta-v1') ?? 'null',
+  );
+  if (
+    meta &&
+    meta.seed === game.seed &&
+    meta.revision === game.revision &&
+    meta.players === game.players.map((p) => p.id).join(',') &&
+    Array.isArray(meta.recordedActions) &&
+    meta.recordedActions.length <= 20_000 &&
+    meta.recordedActions.every(validAction) &&
+    Array.isArray(meta.ghostReplayActions) &&
+    meta.ghostReplayActions.length <= 20_000 &&
+    meta.ghostReplayActions.every(validAction) &&
+    Number.isSafeInteger(meta.ghostActionIndex) &&
+    meta.ghostActionIndex >= 0
+  ) {
+    recordedActions = meta.recordedActions;
+    ghostReplayActions = meta.ghostReplayActions;
+    ghostActionIndex = meta.ghostActionIndex;
+    isGhostMode = meta.isGhostMode === true;
+    runRecordId =
+      typeof meta.runRecordId === 'string' ? meta.runRecordId : runRecordId;
+  }
+} catch {
+  /* Ignore corrupt replay metadata; the validated game is still playable. */
+}
 
 function loadGhosts(): SavedGhost[] {
   try {
-    return JSON.parse(localStorage.getItem('chrono-ghosts-v1') ?? '[]');
+    const saved = JSON.parse(localStorage.getItem('chrono-ghosts-v1') ?? '[]');
+    return Array.isArray(saved)
+      ? saved
+          .filter(
+            (g) =>
+              g &&
+              typeof g.id === 'string' &&
+              typeof g.name === 'string' &&
+              g.name.length <= 60 &&
+              Number.isInteger(g.seed) &&
+              Array.isArray(g.actions) &&
+              g.actions.length <= 20_000 &&
+              g.actions.every(validAction) &&
+              Number.isInteger(g.turns) &&
+              typeof g.won === 'boolean' &&
+              typeof g.date === 'string',
+          )
+          .slice(0, 15)
+      : [];
   } catch {
     return [];
   }
@@ -408,6 +475,7 @@ async function startGhostRun(ghost: SavedGhost) {
   room = null;
   connection = 'Ghost ally co-op';
   isGhostMode = true;
+  runRecordId = crypto.randomUUID();
   ghostReplayActions = [...ghost.actions];
   ghostActionIndex = 0;
   game = createGame(
@@ -454,7 +522,7 @@ $('#app').innerHTML = `
         <section class="dungeon-panel" aria-label="Dungeon board"><div class="board-toolbar"><span><i class="live-dot"></i><strong id="turn-label">YOUR TURN</strong></span><span id="round-label">ROUND 01</span></div><div class="board-wrap"><div id="phaser-board"></div><div id="accessible-grid" class="accessible-grid" role="group" aria-label="Dungeon tiles. Select a card, then a tile. Arrow keys move focus; Enter selects."></div><div id="outcome" class="outcome" hidden></div></div><div class="board-legend"><span><i class="legend-player"></i> Explorer</span><span><i class="legend-danger"></i> Next attack</span><span><i class="legend-exit"></i> Exit</span><span class="legend-hint">PLAN. PLAY. REPEAT.</span></div></section>
         <aside class="run-panel"><section class="party-section"><div class="section-heading"><h2>YOUR PARTY</h2><span id="party-count">01</span></div><div id="party"></div></section><section class="enemy-section"><div class="section-heading"><h2>IN THE SHADOWS</h2><span id="enemy-count">02</span></div><div id="enemies"></div></section><section class="log-section"><div class="section-heading"><h2>FIELD NOTES</h2><span>↙</span></div><ol id="field-notes"></ol></section><div class="exit-note" id="exit-note"><span>▥</span><p>Clear the room.<br><strong>Find your way out.</strong></p></div><div class="emote-bar" id="emote-bar" hidden>${EMOTES.map((e) => `<button class="emote-btn" data-emote="${escape(e)}">${escape(e)}</button>`).join('')}</div></aside>
       </div>
-      <section class="hand-section" aria-label="Your cards"><div class="hand-heading"><div><h2 id="hand-title">Your next move<span id="plays-badge">2 plays left</span></h2><p id="selection-hint" role="status" aria-live="polite" aria-atomic="true">Choose a card, then a highlighted tile.</p></div><button id="end-turn" class="button primary">End turn <span>↗</span></button></div><button id="progression-resume" class="button primary" hidden>Continue expedition</button><div id="hand" class="hand"></div></section>
+      <section class="hand-section" aria-label="Your cards"><div class="hand-heading"><div><h2 id="hand-title">Your next move<span id="plays-badge">2 plays left</span></h2><p id="selection-hint" role="status" aria-live="polite" aria-atomic="true">Choose a card, then a highlighted tile.</p></div><button id="reset-plan" class="button subtle" hidden>Reset plan</button><button id="end-turn" class="button primary">End turn <span>↗</span></button></div><button id="progression-resume" class="button primary" hidden>Continue expedition</button><div id="hand" class="hand"></div></section>
       <footer class="game-footer"><span>THE DUNGEON MOVES ONLY WHEN YOU DO.</span><span><kbd>1</kbd>–<kbd>5</kbd> select card <span class="footer-separator">/</span> <kbd>Esc</kbd> cancel <span class="footer-separator">/</span> <kbd>E</kbd> end turn</span></footer>
     </div>
   </main>
@@ -615,6 +683,7 @@ function canPlay() {
     (!room ||
       (net.socket.connected &&
         !room.paused &&
+        !room.submittedPlayers?.includes(net.session?.playerId ?? '') &&
         activePlayer(game).id === net.session?.playerId))
   );
 }
@@ -622,6 +691,19 @@ function saveLocal() {
   if (!room)
     try {
       localStorage.setItem('chrono-local-v1', JSON.stringify(game));
+      localStorage.setItem(
+        'chrono-local-meta-v1',
+        JSON.stringify({
+          seed: game.seed,
+          revision: game.revision,
+          players: game.players.map((p) => p.id).join(','),
+          recordedActions,
+          isGhostMode,
+          ghostReplayActions,
+          ghostActionIndex,
+          runRecordId,
+        }),
+      );
     } catch {
       /* Storage may be unavailable in private browsing. */
     }
@@ -646,12 +728,20 @@ async function act(action: GameAction) {
   busy = true;
   render();
   try {
-    if (room) await net.action(action, game.revision);
+    if (room && isPlanning()) {
+      if (action.type === 'play') {
+        const next = [...plannedActions, action];
+        game = previewSimultaneousTurn(room.game!, net.session!.playerId, next);
+        plannedActions = next;
+      } else if (action.type === 'end')
+        await net.action(
+          { type: 'submit-turn', actions: plannedActions },
+          room.game!.revision,
+        );
+    } else if (room) await net.action(action, game.revision);
     else {
-      if (game.mode === 'solo' && !isGhostMode) {
-        recordedActions.push(action);
-      }
       game = applyAction(game, activePlayer(game).id, action);
+      if (game.mode === 'solo' && !isGhostMode) recordedActions.push(action);
       saveLocal();
     }
     selected = null;
@@ -835,6 +925,7 @@ function render() {
       : undefined;
   const level = LEVELS[game.level];
   const playable = canPlay();
+  const planning = isPlanning();
   $('.board-wrap').style.aspectRatio = `${level.width} / ${level.height}`;
   const modeText = room
     ? room.mode === 'daily'
@@ -973,6 +1064,22 @@ function render() {
               ? 'Your moves are made. End your turn when ready.'
               : 'Choose a card, then a highlighted tile.';
   $<HTMLButtonElement>('#end-turn').disabled = !playable;
+  $('#end-turn').textContent = planning
+    ? room?.submittedPlayers?.includes(net.session!.playerId)
+      ? 'Turn submitted'
+      : 'Submit turn ↗'
+    : 'End turn ↗';
+  const resetPlan = $<HTMLButtonElement>('#reset-plan');
+  resetPlan.hidden =
+    !planning ||
+    Boolean(room?.submittedPlayers?.includes(net.session!.playerId));
+  resetPlan.disabled = busy || plannedActions.length === 0;
+  if (planning)
+    $('#selection-hint').textContent = room?.submittedPlayers?.includes(
+      net.session!.playerId,
+    )
+      ? 'Waiting for the other explorers to submit.'
+      : `${selectedCard ? `${$('#selection-hint').textContent} ` : ''}${plannedActions.length} cards planned. Preview your moves, then submit your turn. Plans resolve in party order; blocked cards are discarded.`;
   $('#hand').innerHTML = p.hand
     .map((id, index) => {
       const card = CARDS[id];
@@ -1093,6 +1200,7 @@ function render() {
         }
       } finally {
         ghostPlaying = false;
+        saveLocal();
         render();
       }
     }, 350);
@@ -1106,9 +1214,12 @@ function render() {
     prevState &&
     prevState.phase !== 'won' &&
     prevState.phase !== 'lost' &&
+    (!room || Boolean(net.session)) &&
     (game.phase === 'won' || game.phase === 'lost')
   ) {
     void auth.recordRun({
+      runId: runRecordId,
+      session: room ? (net.session ?? undefined) : undefined,
       won: game.phase === 'won',
       turns: game.turns,
       daily: room?.mode === 'daily',
@@ -1440,6 +1551,9 @@ async function newLocal(mode: 'solo' | 'duo') {
   connection = 'Local expedition';
   isGhostMode = false;
   recordedActions = [];
+  runRecordId = crypto.randomUUID();
+  plannedActions = [];
+  planningRevision = -1;
   const myName = auth.getUser()?.username ?? 'You';
   game = createGame(
     mode,
@@ -1595,11 +1709,34 @@ net.onEmote = (data) => {
   toast(`${name}: ${data.emote}`);
 };
 net.onRoom = (next) => {
+  if (room?.code !== next.code) {
+    plannedActions = [];
+    planningRevision = -1;
+  }
   const hadGame = Boolean(room?.game);
   room = next;
   if (next.game) {
     const prevPhase = game.phase;
     game = next.game;
+    if (isPlanning()) {
+      if (planningRevision !== next.game.revision) {
+        plannedActions = [];
+        planningRevision = next.game.revision;
+      }
+      try {
+        game = previewSimultaneousTurn(
+          next.game,
+          net.session!.playerId,
+          plannedActions,
+        );
+      } catch {
+        plannedActions = [];
+        game = previewSimultaneousTurn(next.game, net.session!.playerId, []);
+      }
+    } else {
+      plannedActions = [];
+      planningRevision = -1;
+    }
     if (game.phase === 'won' && prevPhase !== 'won' && next.mode === 'daily') {
       incrementDailyCount();
     }
@@ -1623,9 +1760,9 @@ net.onError = (error) => {
     connection = 'Local expedition';
     try {
       const saved = localStorage.getItem('chrono-local-v1');
-      game = saved
-        ? (JSON.parse(saved) as GameState)
-        : createGame('solo', [{ id: 'local-1', name: 'You' }], seed());
+      game =
+        (saved ? restoreLocalGame(JSON.parse(saved)) : null) ??
+        createGame('solo', [{ id: 'local-1', name: 'You' }], seed());
     } catch {
       game = createGame('solo', [{ id: 'local-1', name: 'You' }], seed());
     }
@@ -1643,6 +1780,14 @@ document.querySelectorAll<HTMLElement>('[data-mode]').forEach(
     }),
 );
 $('#end-turn').onclick = () => void act({ type: 'end' });
+$('#reset-plan').onclick = () => {
+  if (!isPlanning() || !canPlay()) return;
+  plannedActions = [];
+  game = previewSimultaneousTurn(room!.game!, net.session!.playerId, []);
+  selected = null;
+  targets = [];
+  render();
+};
 $('#new-run').onclick = () =>
   void newLocal(game.mode === 'duo' && !room ? 'duo' : 'solo');
 $('#achievements-button').onclick = showAchievements;
