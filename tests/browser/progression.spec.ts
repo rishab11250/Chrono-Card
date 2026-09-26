@@ -85,6 +85,7 @@ test('draft and room choices survive reload and can be reopened after inspecting
   page,
 }) => {
   const s = structuredClone(fixtures.draft);
+  delete s.relicChoices;
   await restore(page, s);
   await expect(page.locator('[data-draft-card]')).toHaveCount(3);
   await expect(page.locator('[data-draft-card]').first()).toBeFocused();
@@ -100,6 +101,15 @@ test('draft and room choices survive reload and can be reopened after inspecting
   );
   // The initializer intentionally restores the original pending draft, proving that state can resume.
   await page.reload();
+  await expect(page.locator('[data-draft-card]')).toHaveCount(3);
+});
+test('relic choices appear and picking a relic transitions to card draft', async ({
+  page,
+}) => {
+  const s = structuredClone(fixtures.draft);
+  await restore(page, s);
+  await expect(page.locator('[data-relic]')).toHaveCount(2);
+  await page.locator('[data-relic]').first().click();
   await expect(page.locator('[data-draft-card]')).toHaveCount(3);
 });
 test.describe('phone controls', () => {
@@ -133,6 +143,7 @@ test.describe('phone controls', () => {
     page,
   }) => {
     const s = structuredClone(fixtures.draft);
+    delete s.relicChoices;
     s.draftChoices['local-1'] = ['forge', 'quickshot', 'blink'];
     await page.setViewportSize({ width: 320, height: 568 });
     await restore(page, s);

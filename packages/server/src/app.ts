@@ -207,8 +207,29 @@ export async function createApp(
   )
     .split(',')
     .map((s) => s.trim());
-  const allowed = (origin: string | undefined) =>
-    !origin || origins.includes(origin);
+  const allowed = (origin: string | undefined) => {
+    if (!origin) return true;
+    if (origins.includes(origin)) return true;
+    if (
+      process.env.RENDER_EXTERNAL_URL &&
+      origin === process.env.RENDER_EXTERNAL_URL
+    )
+      return true;
+    try {
+      const url = new URL(origin);
+      if (
+        url.hostname === 'localhost' ||
+        url.hostname === '127.0.0.1' ||
+        url.hostname.endsWith('.onrender.com') ||
+        url.hostname.endsWith('.vercel.app')
+      ) {
+        return true;
+      }
+    } catch {
+      /* Invalid origin string */
+    }
+    return false;
+  };
   app.use((req, res, next) => {
     const origin = req.headers.origin;
     if (origin && allowed(origin)) {
@@ -296,7 +317,9 @@ export async function createApp(
     Record<string, never>,
     SocketData
   >(http, {
-    cors: { origin: origins },
+    cors: {
+      origin: (origin, callback) => callback(null, allowed(origin)),
+    },
     allowRequest: (req, cb) => cb(null, allowed(req.headers.origin)),
     maxHttpBufferSize: 8192,
   });
