@@ -32,7 +32,11 @@ import { auth } from './auth';
 import { restoreLocalGame, validAction } from './saved-state';
 
 type Board = {
-  update: (state: GameState, targets: Position[]) => void;
+  update: (
+    state: GameState,
+    targets: Position[],
+    localPlayerId?: string,
+  ) => void;
   destroy: () => void;
 };
 let boardInstance: Board | null = null;
@@ -212,6 +216,15 @@ function isPlanning() {
       (p) => p.id === net.session!.playerId && p.hp > 0 && !p.abandoned,
     ),
   );
+}
+function getLocalPlayerId(): string {
+  if (room && net.session) {
+    return net.session.playerId;
+  }
+  if (game?.mode === 'duo' && !room) {
+    return activePlayer(game).id;
+  }
+  return 'local-1';
 }
 let sound = false;
 let connection = 'Local expedition';
@@ -1048,7 +1061,7 @@ function render() {
   $('#party').innerHTML = game.players
     .map(
       (player, i) =>
-        `<div class="party-member ${player.id === p.id ? 'current-player' : ''}"><div class="portrait player-${i}">${icon('explorer')}<span>${i + 1}</span></div><div class="party-details"><div><strong>${escape(player.name)}</strong><small>${player.hp <= 0 ? (player.abandoned ? 'LEFT' : 'FALLEN') : player.id === p.id ? 'ACTIVE' : 'READY'}</small></div><div class="hearts" aria-hidden="true">${Array.from({ length: Math.ceil(player.maxHp / 2) }, (_, heart) => `<span class="${player.hp > heart * 2 ? '' : 'empty-heart'}">${icon('heart')}</span>`).join('')}</div><div class="hp-label"><span>HP ${player.hp} <span>/ ${player.maxHp}</span></span><span>${player.shield ? '◇ Shielded' : 'Explorer'}</span></div>${
+        `<div class="party-member ${player.id === p.id ? 'current-player' : ''}"><div class="portrait player-${i}">${icon('explorer')}<span>${i + 1}</span></div><div class="party-details"><div><strong>${escape(player.name)}${game.players.length > 1 && player.id === getLocalPlayerId() ? ' <span class="you-tag">(You)</span>' : ''}</strong><small>${player.hp <= 0 ? (player.abandoned ? 'LEFT' : 'FALLEN') : player.id === p.id ? 'ACTIVE' : 'READY'}</small></div><div class="hearts" aria-hidden="true">${Array.from({ length: Math.ceil(player.maxHp / 2) }, (_, heart) => `<span class="${player.hp > heart * 2 ? '' : 'empty-heart'}">${icon('heart')}</span>`).join('')}</div><div class="hp-label"><span>HP ${player.hp} <span>/ ${player.maxHp}</span></span><span>${player.shield ? '◇ Shielded' : 'Explorer'}</span></div>${
           player.id === p.id && (player.statuses ?? []).length
             ? `<div class="party-statuses">${(player.statuses ?? [])
                 .map(
@@ -1152,12 +1165,13 @@ function render() {
       button.addEventListener('mouseenter', () => {
         if (selected === null && canPlay()) {
           const cardTargets = previews[idx] ?? [];
-          if (boardInstance) boardInstance.update(game, cardTargets);
+          if (boardInstance)
+            boardInstance.update(game, cardTargets, getLocalPlayerId());
         }
       });
       button.addEventListener('mouseleave', () => {
         if (selected === null && canPlay()) {
-          if (boardInstance) boardInstance.update(game, []);
+          if (boardInstance) boardInstance.update(game, [], getLocalPlayerId());
         }
       });
     });
@@ -1190,9 +1204,9 @@ function render() {
         new URLSearchParams(location.search).has('watch')));
   $('#emote-bar').hidden = !room;
   if (boardInstance) {
-    boardInstance.update(game, targets);
+    boardInstance.update(game, targets, getLocalPlayerId());
   } else if (!inLobby) {
-    void loadBoard().then((b) => b.update(game, targets));
+    void loadBoard().then((b) => b.update(game, targets, getLocalPlayerId()));
   }
   $('#outcome').hidden = game.phase !== 'won' && game.phase !== 'lost';
   if (game.phase === 'won' || game.phase === 'lost') {

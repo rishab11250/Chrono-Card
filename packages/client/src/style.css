@@ -667,6 +667,12 @@ nav {
   font-size: 5px;
   color: #d3e6a9;
 }
+.you-tag {
+  font-family: monospace;
+  font-size: 14px;
+  color: #7affc8;
+  font-weight: bold;
+}
 .hp-track {
   height: 7px;
   border: 1px solid #1d293c;

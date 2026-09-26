@@ -80,6 +80,7 @@ interface TrackedEnemy {
 class Dungeon extends Phaser.Scene {
   state?: GameState;
   targets: Position[] = [];
+  localPlayerId?: string;
   ready = false;
   renderedLevel = -1;
   renderedTilesKey = '';
@@ -241,16 +242,19 @@ class Dungeon extends Phaser.Scene {
     }
   }
 
-  updateBoard(state: GameState, targets: Position[]) {
+  updateBoard(state: GameState, targets: Position[], localPlayerId?: string) {
     const prev = this.state;
+    const prevLocal = this.localPlayerId;
     if (
       prev === state &&
+      prevLocal === localPlayerId &&
       this.targets.length === targets.length &&
       this.targets.every((p, i) => same(p, targets[i]))
     )
       return;
     this.state = state;
     this.targets = targets;
+    this.localPlayerId = localPlayerId;
     if (this.ready) {
       this.paint();
       if (
@@ -781,6 +785,27 @@ class Dungeon extends Phaser.Scene {
       const targetPx = p.x * T + 16;
       const targetPy = p.y * T + 16;
       const isActive = p.id === activePlayer(s).id;
+      const isLocal = this.localPlayerId
+        ? p.id === this.localPlayerId
+        : isActive;
+      const isGhost =
+        p.id === 'ghost-1' || p.name.toLowerCase().includes('ghost');
+
+      const showCursor = isLocal || isGhost;
+      const cursorText = isGhost
+        ? '▼ (ghost)'
+        : isLocal
+          ? s.players.length > 1
+            ? '▼ YOU'
+            : '▼'
+          : '';
+      const cursorColor = isGhost
+        ? '#88eeff'
+        : isLocal
+          ? isActive
+            ? '#fff1af'
+            : '#7affc8'
+          : '#fff1af';
 
       if (!tracked) {
         const container = this.add.container(targetPx, targetPy);
@@ -789,16 +814,14 @@ class Dungeon extends Phaser.Scene {
           .ellipse(0, 9, 23, 8)
           .setStrokeStyle(1, 0xffeb9a)
           .setVisible(isActive);
-        const isGhost =
-          p.id === 'ghost-1' || p.name.toLowerCase().includes('ghost');
         const cursor = this.add
-          .text(0, -20, isGhost ? '▼ (ghost)' : '▼', {
+          .text(0, -20, cursorText, {
             fontFamily: 'monospace',
             fontSize: isGhost ? '7px' : '8px',
-            color: isGhost ? '#88eeff' : '#fff1af',
+            color: cursorColor,
           })
           .setOrigin(0.5)
-          .setVisible(isActive);
+          .setVisible(showCursor);
 
         if (!this.reduced()) {
           this.tweens.add({
@@ -814,7 +837,7 @@ class Dungeon extends Phaser.Scene {
         if (isGhost) {
           sprite.setTint(0x78e6ff);
           sprite.setAlpha(0.72);
-        } else if (i === 0) {
+        } else if (isLocal) {
           try {
             const skin = localStorage.getItem('chrono-skin');
             const cosmeticTints: Record<string, number> = {
@@ -824,11 +847,13 @@ class Dungeon extends Phaser.Scene {
             };
             if (skin && cosmeticTints[skin])
               sprite.setTint(cosmeticTints[skin]);
+            else
+              sprite.setTint([0xffffff, 0x9cd8ff, 0xffc496, 0xe0b9ff][i % 4]);
           } catch {
-            /* Storage might be disabled */
+            sprite.setTint([0xffffff, 0x9cd8ff, 0xffc496, 0xe0b9ff][i % 4]);
           }
-        } else if (i > 0) {
-          sprite.setTint([0xffffff, 0x9cd8ff, 0xffc496, 0xe0b9ff][i]);
+        } else {
+          sprite.setTint([0xffffff, 0x9cd8ff, 0xffc496, 0xe0b9ff][i % 4]);
         }
 
         const bubble = this.add
@@ -863,7 +888,9 @@ class Dungeon extends Phaser.Scene {
       }
       // Reconcile existing sprites on every state update, not only on creation.
       tracked.ring.setVisible(isActive);
-      tracked.cursor.setVisible(isActive);
+      tracked.cursor.setVisible(showCursor);
+      tracked.cursor.setText(cursorText);
+      tracked.cursor.setColor(cursorColor);
       tracked.shield.setVisible(Boolean(p.shield));
       tracked.container.setVisible(true);
 
@@ -906,8 +933,8 @@ export function createBoard(parent: HTMLElement) {
     banner: false,
   });
   return {
-    update: (state: GameState, targets: Position[]) =>
-      scene.updateBoard(state, targets),
+    update: (state: GameState, targets: Position[], localPlayerId?: string) =>
+      scene.updateBoard(state, targets, localPlayerId),
     destroy: () => game.destroy(true),
   };
 }
