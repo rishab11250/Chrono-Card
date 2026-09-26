@@ -20,7 +20,7 @@ npm run build
 npm start
 ```
 
-Open **http://localhost:3001**. For a persistent Docker setup, use `docker compose up --build` instead. Public deployment is intentionally deferred at the owner's request; see [deployment instructions](docs/deployment.md).
+Open **http://localhost:3001**. Production and Docker require a private `AUTH_SECRET` of at least 32 bytes. For a persistent Docker setup, configure that secret and use `docker compose up --build`. Public deployment is intentionally deferred at the owner's request; see [deployment instructions](docs/deployment.md).
 
 ## Play
 
@@ -68,17 +68,21 @@ Browser tests use `/usr/bin/chromium` by default here. Elsewhere, run `npx playw
 
 See [.env.example](.env.example). No secrets are embedded in the client.
 
-| Variable          | Used by      | Meaning                                                                     |
-| ----------------- | ------------ | --------------------------------------------------------------------------- |
-| `PORT`            | Server       | HTTP/WebSocket port, default 3001                                           |
-| `CLIENT_ORIGIN`   | Server       | Comma-separated allowed browser origins, without trailing slashes           |
-| `REDIS_URL`       | Server       | Optional Redis/Redis TLS connection URL; missing means in-memory rooms      |
-| `DATA_DIR`        | Server       | Directory for `chrono.sqlite`; mount persistent storage in production       |
-| `VITE_SERVER_URL` | Client build | Public server origin; omit for same-origin hosting or the development proxy |
+| Variable           | Used by      | Meaning                                                                     |
+| ------------------ | ------------ | --------------------------------------------------------------------------- |
+| `PORT`             | Server       | HTTP/WebSocket port, default 3001                                           |
+| `AUTH_SECRET`      | Server       | Private signing key, at least 32 bytes; required in production              |
+| `TRUST_PROXY_HOPS` | Server       | Exact trusted reverse-proxy hop count, default 0                            |
+| `CLIENT_ORIGIN`    | Server       | Comma-separated allowed browser origins, without trailing slashes           |
+| `REDIS_URL`        | Server       | Optional Redis/Redis TLS connection URL; missing means in-memory rooms      |
+| `DATA_DIR`         | Server       | Directory for `chrono.sqlite`; mount persistent storage in production       |
+| `VITE_SERVER_URL`  | Client build | Public server origin; omit for same-origin hosting or the development proxy |
 
 The server does not implicitly load `.env` files. Export variables, configure your host, or invoke Node with `--env-file=.env` as explained in the deployment guide. Vite loads its usual `packages/client/.env.local` at build time.
 
 ## Scope and constraints
+
+See the [repository audit](docs/repo-audit.md) for security, persistence, simultaneous-play fixes, regression coverage, and remaining operational limits.
 
 The three-Act expansion adds graph-based routes, deterministic drafts, six new card IDs, six enemy kinds, and explicit threat budgets. See [mechanics and authoring notes](docs/progression.md). Upstream's authentication/profile, ghost replay, cosmetics, and tracked sprite rendering are retained. The original submission PDF describes the earlier milestone; this README and the mechanics notes describe the expanded game.
 

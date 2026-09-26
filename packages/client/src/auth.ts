@@ -1,4 +1,4 @@
-import type { UserProfile } from '@chrono/shared';
+import type { UserProfile, Session } from '@chrono/shared';
 import { API_URL } from './net';
 
 const TOKEN_KEY = 'chrono-auth-token';
@@ -13,7 +13,23 @@ export class ClientAuth {
     try {
       this.token = localStorage.getItem(TOKEN_KEY);
       const cached = localStorage.getItem(USER_KEY);
-      if (cached) this.user = JSON.parse(cached);
+      if (cached) {
+        const user = JSON.parse(cached);
+        if (
+          user &&
+          typeof user.id === 'string' &&
+          typeof user.username === 'string' &&
+          typeof user.avatar === 'string' &&
+          typeof user.createdAt === 'string' &&
+          user.stats &&
+          ['runsPlayed', 'runsWon', 'dailyWins', 'bestTurns'].every(
+            (key) =>
+              Number.isSafeInteger(user.stats[key]) && user.stats[key] >= 0,
+          ) &&
+          (user.achievements === undefined || Array.isArray(user.achievements))
+        )
+          this.user = user;
+      }
     } catch {
       this.token = null;
       this.user = null;
@@ -64,7 +80,11 @@ export class ClientAuth {
       throw new Error(data.error || 'Login failed.');
     }
     this.token = data.token;
-    localStorage.setItem(TOKEN_KEY, data.token);
+    try {
+      localStorage.setItem(TOKEN_KEY, data.token);
+    } catch {
+      /* Retain the live session even if storage is full. */
+    }
     this.setUser(data.user);
     return data.user;
   }
@@ -84,7 +104,11 @@ export class ClientAuth {
       throw new Error(data.error || 'Registration failed.');
     }
     this.token = data.token;
-    localStorage.setItem(TOKEN_KEY, data.token);
+    try {
+      localStorage.setItem(TOKEN_KEY, data.token);
+    } catch {
+      /* Retain the live session even if storage is full. */
+    }
     this.setUser(data.user);
     return data.user;
   }
@@ -109,6 +133,8 @@ export class ClientAuth {
   }
 
   async recordRun(stats: {
+    runId: string;
+    session?: Session;
     won?: boolean;
     turns?: number;
     daily?: boolean;

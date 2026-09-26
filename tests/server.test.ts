@@ -72,6 +72,43 @@ afterEach(async () => {
 });
 
 describe('authoritative rooms', () => {
+  it('accepts independent simultaneous plans, prevents replacements, and continues after a missing planner leaves', async () => {
+    const host = await client(),
+      guest = await client(),
+      third = await client();
+    const created = await host.emitWithAck('room:create', {
+      name: 'Host',
+      mode: 'party',
+      turnOrder: 'simultaneous',
+    });
+    if (!created.ok) throw new Error(created.error);
+    const session = created.data,
+      other = await join(guest, session.code);
+    await join(third, session.code, 'Third');
+    await host.emitWithAck('room:start');
+    const turn = {
+      revision: 0,
+      action: { type: 'submit-turn' as const, actions: [] },
+    };
+    expect((await guest.emitWithAck('game:action', turn)).ok).toBe(true);
+    expect(states.get(guest)?.submittedPlayers).toEqual([other.playerId]);
+    expect(states.get(guest)?.game?.round).toBe(1);
+    expect((await guest.emitWithAck('game:action', turn)).ok).toBe(false);
+    expect((await host.emitWithAck('game:action', turn)).ok).toBe(true);
+    expect((await third.emitWithAck('room:leave')).ok).toBe(true);
+    await expect.poll(() => states.get(host)?.game?.round).toBe(2);
+    expect(states.get(host)?.submittedPlayers).toEqual([]);
+    const authoritative = app.rooms.get(session.code)!.game!;
+    authoritative.players[1].hp = 0;
+    expect(
+      (
+        await guest.emitWithAck('game:action', {
+          revision: authoritative.revision,
+          action: { type: 'submit-turn', actions: [] },
+        })
+      ).ok,
+    ).toBe(false);
+  });
   it('creates a room through HTTP and attaches its private session over a socket', async () => {
     const response = await fetch(`${url}/api/rooms`, {
       method: 'POST',
@@ -389,13 +426,26 @@ describe('authoritative rooms', () => {
     });
     expect(avatarRes.status).toBe(200);
 
+    const dailyClient = await client();
+    const proof = await create(dailyClient, 'daily');
+    await dailyClient.emitWithAck('room:start');
+    const completed = app.rooms.get(proof.code)!.game!;
+    completed.phase = 'won';
+    completed.turns = 14;
+    const report = {
+      runId: crypto.randomUUID(),
+      won: false,
+      turns: 99,
+      daily: true,
+      session: proof,
+    };
     const runRes = await fetch(`${url}/api/auth/record-run`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ won: true, turns: 14, daily: true }),
+      body: JSON.stringify(report),
     });
     expect(runRes.status).toBe(200);
     const runData = (await runRes.json()) as {
@@ -406,6 +456,31 @@ describe('authoritative rooms', () => {
     expect(runData.user.stats.runsWon).toBe(1);
     expect(runData.user.stats.dailyWins).toBe(1);
     expect(runData.user.stats.bestTurns).toBe(14);
+    const repeated = await fetch(`${url}/api/auth/record-run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ ...report, runId: crypto.randomUUID() }),
+    });
+    expect(
+      ((await repeated.json()) as { user: UserProfile }).user.stats.runsPlayed,
+    ).toBe(1);
+    const fabricated = await fetch(`${url}/api/auth/record-run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        runId: crypto.randomUUID(),
+        won: true,
+        turns: 1,
+        daily: true,
+      }),
+    });
+    expect(fabricated.status).toBe(400);
 
     const pubRes = await fetch(`${url}/api/users/TestExplorer`);
     expect(pubRes.status).toBe(200);
@@ -415,5 +490,78 @@ describe('authoritative rooms', () => {
     };
     expect(pubData.user.username).toBe('TestExplorer');
     expect(pubData.user.stats.runsWon).toBe(1);
+  });
+});
+describe('HTTP audit regressions', () => {
+  it('validates JSON errors, protects mutations by origin, and supports cross-origin ghost preflight', async () => {
+    const preflight = await fetch(`${url}/api/ghosts`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'http://localhost:5173',
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'content-type',
+      },
+    });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get('access-control-allow-headers')).toContain(
+      'Content-Type',
+    );
+    const denied = await fetch(`${url}/api/auth/register`, {
+      method: 'POST',
+      headers: {
+        Origin: 'https://untrusted.invalid',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ username: 'Denied', password: '123456' }),
+    });
+    expect(denied.status).toBe(403);
+    const malformed = await fetch(`${url}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{',
+    });
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toEqual({ error: 'Invalid request data.' });
+    const registered = await fetch(`${url}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: 'AuditUser',
+        password: 'audit-password',
+      }),
+    });
+    const { token } = (await registered.json()) as AuthResponse;
+    const invalid = await fetch(`${url}/api/auth/avatar`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ avatar: 123 }),
+    });
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toEqual({ error: 'Invalid request data.' });
+  });
+  it('limits password attempts and atomically rejects usernames differing only by case', async () => {
+    const register = (username: string) =>
+      fetch(`${url}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password: 'audit-password' }),
+      });
+    const responses = await Promise.all([
+      register('RaceUser'),
+      register('raceuser'),
+    ]);
+    expect(responses.map((r) => r.status).sort()).toEqual([201, 409]);
+    let last: Response | undefined;
+    for (let i = 0; i < 20; i++)
+      last = await fetch(`${url}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'missing', password: 'wrong' }),
+      });
+    expect(last!.status).toBe(429);
+    expect(last!.headers.get('retry-after')).toBeTruthy();
   });
 });

@@ -80,13 +80,21 @@ export class Network {
   }
   save(session: Session) {
     this.session = session;
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    } catch {
+      /* Keep the current tab usable when storage is blocked. */
+    }
   }
   clear() {
     this.session = null;
     this.watchCode = null;
-    sessionStorage.removeItem(SESSION_KEY);
-    sessionStorage.removeItem('chrono-watch');
+    try {
+      sessionStorage.removeItem(SESSION_KEY);
+      sessionStorage.removeItem('chrono-watch');
+    } catch {
+      /* Storage is optional. */
+    }
   }
   async connect() {
     if (this.socket.connected) return;
@@ -143,7 +151,11 @@ export class Network {
       await this.socket.timeout(8000).emitWithAck('room:watch', { code }),
     );
     this.watchCode = code;
-    sessionStorage.setItem('chrono-watch', code);
+    try {
+      sessionStorage.setItem('chrono-watch', code);
+    } catch {
+      /* Storage is optional. */
+    }
   }
   async start() {
     this.unwrap(await this.socket.timeout(8000).emitWithAck('room:start'));

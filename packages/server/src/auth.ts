@@ -1,69 +1,87 @@
-import {
-  createHmac,
-  randomBytes,
-  scryptSync,
-  timingSafeEqual,
-} from 'node:crypto';
+import { createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 
-const AUTH_SECRET =
-  process.env.AUTH_SECRET ||
-  'chrono-card-auth-secret-key-super-secure-production-2026';
-
-export function hashPassword(
+function derive(password: string, salt: string): Promise<Buffer> {
+  return new Promise((resolve, reject) =>
+    scrypt(password, salt, 64, (error, key) =>
+      error ? reject(error) : resolve(key),
+    ),
+  );
+}
+export async function hashPassword(
   password: string,
   salt = randomBytes(16).toString('hex'),
 ) {
-  const hash = scryptSync(password, salt, 64).toString('hex');
-  return { hash, salt };
+  return { hash: (await derive(password, salt)).toString('hex'), salt };
 }
-
-export function verifyPassword(
+export async function verifyPassword(
   password: string,
   salt: string,
   expectedHash: string,
 ) {
+  if (!/^[a-f0-9]{128}$/i.test(expectedHash)) return false;
   try {
-    const hash = scryptSync(password, salt, 64).toString('hex');
-    const bufA = Buffer.from(hash, 'hex');
-    const bufB = Buffer.from(expectedHash, 'hex');
-    if (bufA.length !== bufB.length) return false;
-    return timingSafeEqual(bufA, bufB);
+    return timingSafeEqual(
+      await derive(password, salt),
+      Buffer.from(expectedHash, 'hex'),
+    );
   } catch {
     return false;
   }
 }
 
-export function createToken(payload: { id: string; username: string }): string {
-  const data = Buffer.from(
-    JSON.stringify({ ...payload, exp: Date.now() + 30 * 86_400_000 }),
-  ).toString('base64url');
-  const sig = createHmac('sha256', AUTH_SECRET)
-    .update(data)
-    .digest('base64url');
-  return `${data}.${sig}`;
-}
-
-export function verifyToken(
-  token: string,
-): { id: string; username: string } | null {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 2) return null;
-    const [data, sig] = parts;
-    if (!data || !sig) return null;
-    const expectedSig = createHmac('sha256', AUTH_SECRET)
-      .update(data)
-      .digest('base64url');
-    const bufSig = Buffer.from(sig);
-    const bufExpected = Buffer.from(expectedSig);
-    if (bufSig.length !== bufExpected.length) return null;
-    if (!timingSafeEqual(bufSig, bufExpected)) return null;
-    const payload = JSON.parse(Buffer.from(data, 'base64url').toString('utf8'));
-    if (typeof payload.exp === 'number' && Date.now() > payload.exp)
-      return null;
-    if (!payload.id || !payload.username) return null;
-    return { id: String(payload.id), username: String(payload.username) };
-  } catch {
-    return null;
-  }
+/** Production keys must be provisioned; development keys expire when the server restarts. */
+export function createAuth(
+  secret = process.env.AUTH_SECRET,
+  production = process.env.NODE_ENV === 'production',
+) {
+  if (
+    (production && !secret) ||
+    (secret !== undefined && Buffer.byteLength(secret) < 32)
+  )
+    throw new Error(
+      'AUTH_SECRET must contain at least 32 bytes. Configure a random secret before starting production.',
+    );
+  const key = secret ?? randomBytes(32).toString('hex');
+  return {
+    createToken(payload: { id: string; username: string }) {
+      const data = Buffer.from(
+        JSON.stringify({ ...payload, exp: Date.now() + 30 * 86_400_000 }),
+      ).toString('base64url');
+      return (
+        data + '.' + createHmac('sha256', key).update(data).digest('base64url')
+      );
+    },
+    verifyToken(token: string): { id: string; username: string } | null {
+      try {
+        if (token.length > 2048) return null;
+        const parts = token.split('.');
+        if (parts.length !== 2) return null;
+        const [data, sig] = parts;
+        const expected = createHmac('sha256', key)
+          .update(data)
+          .digest('base64url');
+        if (
+          sig.length !== expected.length ||
+          !timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
+        )
+          return null;
+        const payload = JSON.parse(
+          Buffer.from(data, 'base64url').toString('utf8'),
+        );
+        if (
+          !payload ||
+          typeof payload.id !== 'string' ||
+          !payload.id ||
+          typeof payload.username !== 'string' ||
+          !payload.username ||
+          !Number.isSafeInteger(payload.exp) ||
+          payload.exp <= Date.now()
+        )
+          return null;
+        return { id: payload.id, username: payload.username };
+      } catch {
+        return null;
+      }
+    },
+  };
 }

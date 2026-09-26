@@ -18,6 +18,7 @@ import {
   CARDS,
   type CardId,
   resolveSimultaneousRound,
+  previewSimultaneousTurn,
   type ClientEvents,
   type GameAction,
   type GameState,
@@ -30,7 +31,7 @@ import {
   type UserProfile,
 } from '@chrono/shared';
 import { persistence, type StoredUser } from './persistence';
-import { createToken, hashPassword, verifyPassword, verifyToken } from './auth';
+import { createAuth, hashPassword, verifyPassword } from './auth';
 
 type StoredMember = Member & {
   token: string;
@@ -84,6 +85,28 @@ const actionSchema = z
       z.object({ type: z.literal('end') }).strict(),
       z
         .object({
+          type: z.literal('submit-turn'),
+          actions: z
+            .array(
+              z
+                .object({
+                  type: z.literal('play'),
+                  card: z.number().int().min(0).max(4),
+                  target: z
+                    .object({
+                      x: z.number().int().min(0).max(30),
+                      y: z.number().int().min(0).max(30),
+                    })
+                    .strict()
+                    .optional(),
+                })
+                .strict(),
+            )
+            .max(32),
+        })
+        .strict(),
+      z
+        .object({
           type: z.literal('choose-room'),
           roomId: z.string().min(1).max(60),
         })
@@ -135,8 +158,8 @@ const registerSchema = z
   .strict();
 const loginSchema = z
   .object({
-    username: z.string().trim().min(1),
-    password: z.string().min(1),
+    username: z.string().trim().min(1).max(20),
+    password: z.string().min(1).max(100),
   })
   .strict();
 const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -153,9 +176,16 @@ export async function createApp(
     graceMs?: number;
     clientOrigin?: string;
     eventLimit?: number;
+    authLimit?: number;
   } = {},
 ) {
   const app = express();
+  const { createToken, verifyToken } = createAuth();
+  const httpLimits = new Map<string, { time: number; count: number }>();
+  const proxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 0);
+  if (!Number.isInteger(proxyHops) || proxyHops < 0 || proxyHops > 10)
+    throw new Error('TRUST_PROXY_HOPS must be an integer from 0 to 10.');
+  app.set('trust proxy', proxyHops);
   app.disable('x-powered-by');
   const http = createServer(app);
   const origins = (
@@ -175,6 +205,54 @@ export async function createApp(
     }
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'same-origin');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader(
+      'Content-Security-Policy',
+      "frame-ancestors 'none'; base-uri 'self'; object-src 'none'",
+    );
+    if (req.path.startsWith('/api/')) {
+      if (req.path.startsWith('/api/auth'))
+        res.setHeader('Cache-Control', 'no-store');
+      if (!allowed(origin)) {
+        res.status(403).json({ error: 'Origin not allowed.' });
+        return;
+      }
+      if (req.method === 'OPTIONS') {
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.setHeader(
+          'Access-Control-Allow-Headers',
+          'Content-Type, Authorization',
+        );
+        res.sendStatus(204);
+        return;
+      }
+      if (req.method === 'POST') {
+        const authAttempt =
+          req.path === '/api/auth/login' || req.path === '/api/auth/register';
+        const key = `${authAttempt ? 'auth' : 'write'}:${req.ip ?? req.socket.remoteAddress}`;
+        const now = Date.now(),
+          previous = httpLimits.get(key);
+        const entry =
+          previous && now - previous.time < 60_000
+            ? previous
+            : { time: now, count: 0 };
+        if (entry.count++ >= (authAttempt ? (options.authLimit ?? 20) : 60)) {
+          res.setHeader(
+            'Retry-After',
+            String(Math.max(1, Math.ceil((60_000 - now + entry.time) / 1000))),
+          );
+          res
+            .status(429)
+            .json({ error: 'Too many requests. Try again in a minute.' });
+          return;
+        }
+        if (httpLimits.size >= 10_000 && !httpLimits.has(key)) {
+          res.status(503).json({ error: 'Server is busy. Try again shortly.' });
+          return;
+        }
+        httpLimits.set(key, entry);
+      }
+    }
     next();
   });
   const io = new Server<
@@ -208,9 +286,12 @@ export async function createApp(
         );
       if (rooms.size >= maxRooms)
         throw new Error('The server is full. Try again shortly.');
-      const room = JSON.parse(saved) as Room;
+      const room = JSON.parse(saved) as Room & {
+        pendingPlans?: [string, GameAction][];
+      };
       room.turnOrder = room.turnOrder ?? 'alternating';
-      room.pendingActions = new Map();
+      room.pendingActions = new Map(room.pendingPlans ?? []);
+      delete room.pendingPlans;
       if (Date.now() - room.touchedAt > 7_200_000)
         throw new Error('This room has expired.');
       room.members.forEach((m) => {
@@ -258,6 +339,7 @@ export async function createApp(
       game: room.game,
       paused: paused(room),
       graceSeconds: Math.ceil(graceMs / 1000),
+      submittedPlayers: [...room.pendingActions.keys()],
       spectators: [...(sockets ?? [])].filter(
         (id) => io.sockets.sockets.get(id)?.data.spectator,
       ).length,
@@ -265,8 +347,31 @@ export async function createApp(
   }
   function publish(room: Room) {
     room.touchedAt = Date.now();
-    storage.save(room.code, room);
+    storage.save(room.code, {
+      ...room,
+      pendingActions: undefined,
+      pendingPlans: [...room.pendingActions],
+    });
     io.to(room.code).emit('room:state', view(room));
+  }
+  function resolvePlans(room: Room) {
+    if (
+      room.turnOrder !== 'simultaneous' ||
+      room.game?.phase !== 'playing' ||
+      paused(room)
+    )
+      return;
+    const living = room.game.players.filter((p) => p.hp > 0 && !p.abandoned);
+    if (!living.length || !living.every((p) => room.pendingActions.has(p.id)))
+      return;
+    room.game = resolveSimultaneousRound(
+      room.game,
+      living.map((p) => ({
+        playerId: p.id,
+        action: room.pendingActions.get(p.id)!,
+      })),
+    );
+    room.pendingActions.clear();
   }
   function unattached(socket: GameSocket) {
     if (socket.data.code) throw new Error('Leave your current room first.');
@@ -305,6 +410,8 @@ export async function createApp(
     turnOrder: TurnOrder = 'alternating',
     cosmetic?: string,
   ) {
+    if (mode === 'daily' && turnOrder !== 'alternating')
+      throw new Error('Daily challenges use alternating turns.');
     if (rooms.size >= maxRooms)
       throw new Error('The server is full. Try again shortly.');
     let code = makeCode();
@@ -337,8 +444,11 @@ export async function createApp(
       member.disconnectedAt = Date.now();
       if (explicit) {
         member.forfeited = true;
-        if (room.game) room.game = abandonPlayer(room.game, member.id);
-        else room.members = room.members.filter((m) => m.id !== member.id);
+        if (room.game) {
+          room.game = abandonPlayer(room.game, member.id);
+          room.pendingActions.delete(member.id);
+          resolvePlans(room);
+        } else room.members = room.members.filter((m) => m.id !== member.id);
         if (room.host === member.id)
           room.host = room.members.find((m) => !m.forfeited)?.id ?? '';
       }
@@ -373,25 +483,41 @@ export async function createApp(
       const data = z
         .object({
           id: z.string().min(1).max(64),
-          seed: z.number().int(),
-          mode: z.string(),
-          actionsJson: z.string(),
+          seed: z.number().int().min(0).max(0xffffffff),
+          mode: z.literal('solo'),
+          actionsJson: z.string().max(60_000),
           name: nameSchema,
-          date: z.string().optional(),
+          date: z
+            .string()
+            .regex(/^\d{4}-\d{2}-\d{2}$/)
+            .optional(),
         })
         .strict()
         .parse(req.body);
+      const actions = z
+        .array(actionSchema.shape.action)
+        .max(10_000)
+        .parse(JSON.parse(data.actionsJson));
+      if (actions.some((action) => action.type === 'submit-turn'))
+        throw new Error('Ghosts are solo recordings.');
       storage.saveGhost(
         data.id,
         data.seed,
         data.mode,
-        data.actionsJson,
+        JSON.stringify(actions),
         data.name,
         data.date ?? utcDate(),
       );
       res.status(201).json({ ok: true });
-    } catch {
-      res.status(400).json({ error: 'Invalid ghost data.' });
+    } catch (error) {
+      res
+        .status(
+          error instanceof Error &&
+            error.message.includes('UNIQUE constraint failed')
+            ? 409
+            : 400,
+        )
+        .json({ error: 'Invalid or duplicate ghost data.' });
     }
   });
   function authUser(req: express.Request): StoredUser | null {
@@ -446,7 +572,7 @@ export async function createApp(
           res.status(409).json({ error: 'Username is already taken.' });
           return;
         }
-        const { hash, salt } = hashPassword(data.password);
+        const { hash, salt } = await hashPassword(data.password);
         const user = storage.createUser({
           id: randomUUID(),
           username: data.username,
@@ -463,12 +589,19 @@ export async function createApp(
           user: formatProfile(user, achievements),
         });
       } catch (error) {
-        res.status(400).json({
-          error:
-            error instanceof z.ZodError
-              ? (error.issues[0]?.message ?? 'Invalid registration details.')
-              : 'Unable to register.',
-        });
+        res
+          .status(
+            error instanceof Error &&
+              error.message.includes('UNIQUE constraint failed')
+              ? 409
+              : 400,
+          )
+          .json({
+            error:
+              error instanceof z.ZodError
+                ? (error.issues[0]?.message ?? 'Invalid registration details.')
+                : 'Unable to register.',
+          });
       }
     },
   );
@@ -481,7 +614,7 @@ export async function createApp(
         const user = await storage.getUserByUsername(data.username);
         if (
           !user ||
-          !verifyPassword(data.password, user.salt, user.password_hash)
+          !(await verifyPassword(data.password, user.salt, user.password_hash))
         ) {
           res.status(401).json({ error: 'Incorrect username or password.' });
           return;
@@ -529,13 +662,57 @@ export async function createApp(
         res.status(401).json({ error: 'Not authenticated.' });
         return;
       }
-      const schema = z.object({
-        won: z.boolean().optional(),
-        turns: z.number().int().min(1).optional(),
-        daily: z.boolean().optional(),
-      });
+      const schema = z
+        .object({
+          runId: z.string().uuid(),
+          won: z.boolean(),
+          turns: z.number().int().min(1).max(1_000_000),
+          daily: z.boolean().optional(),
+          session: z
+            .object({
+              code: codeSchema,
+              playerId: z.string().uuid(),
+              token: z.string().regex(/^[a-f0-9]{64}$/),
+            })
+            .strict()
+            .optional(),
+        })
+        .strict();
       const data = schema.parse(req.body);
-      const updated = storage.updateUserStats(user.id, data);
+      let stats = { won: data.won, turns: data.turns, daily: false },
+        runId = data.runId;
+      if (data.session) {
+        const room = rooms.get(data.session.code),
+          member = room?.members.find((m) => m.id === data.session!.playerId);
+        if (
+          !room?.game ||
+          !member ||
+          member.forfeited ||
+          !timingSafeEqual(
+            Buffer.from(member.token),
+            Buffer.from(data.session.token),
+          ) ||
+          !['won', 'lost'].includes(room.game.phase)
+        ) {
+          res.status(400).json({
+            error:
+              'A completed expedition and its private explorer session are required.',
+          });
+          return;
+        }
+        stats = {
+          won: room.game.phase === 'won',
+          turns: room.game.turns,
+          daily: room.mode === 'daily',
+        };
+        runId = room.runId;
+      } else if (data.daily) {
+        res
+          .status(400)
+          .json({ error: 'Daily wins must be verified by the game server.' });
+        return;
+      }
+      const updated = storage.updateUserStats(user.id, stats, runId);
       const achievements = storage.getAchievements(user.username);
       res.json({
         ok: true,
@@ -573,7 +750,6 @@ export async function createApp(
       res.status(404).json({ error: 'Player not found.' });
     }
   });
-  const httpLimits = new Map<string, { time: number; count: number }>();
   app.options('/api/rooms', (req, res) => {
     if (!allowed(req.headers.origin)) {
       res.sendStatus(403);
@@ -646,6 +822,35 @@ export async function createApp(
   );
   app.use(express.static(clientDist));
   app.get('/', (_req, res) => res.sendFile(`${clientDist}/index.html`));
+  app.use('/api', (_req, res) =>
+    res.status(404).json({ error: 'API route not found.' }),
+  );
+  app.use(
+    (
+      error: unknown,
+      _req: express.Request,
+      res: express.Response,
+      _next: express.NextFunction,
+    ) => {
+      const status =
+        error instanceof z.ZodError
+          ? 400
+          : typeof error === 'object' &&
+              error !== null &&
+              'status' in error &&
+              (error.status === 400 || error.status === 413)
+            ? error.status
+            : 500;
+      res.status(status).json({
+        error:
+          status === 413
+            ? 'Request body is too large.'
+            : status === 400
+              ? 'Invalid request data.'
+              : 'Unable to complete the request.',
+      });
+    },
+  );
   io.on('connection', (socket) => {
     // Bound event traffic and serialize each socket's asynchronous join/resume operations.
     let queue = Promise.resolve();
@@ -825,44 +1030,32 @@ export async function createApp(
             data.action.type === 'draft-card'
           )
             throw new Error('No progression choice is pending.');
-          room.pendingActions.set(member.id, data.action);
-          const livingMembers = room.members.filter((m) => {
-            const p = room.game?.players.find((player) => player.id === m.id);
-            return p && p.hp > 0 && !m.forfeited && m.connected;
+          if (room.pendingActions.has(member.id))
+            throw new Error('Your turn is already submitted.');
+          const plan =
+            data.action.type === 'submit-turn'
+              ? data.action.actions
+              : data.action.type === 'play'
+                ? [data.action]
+                : [];
+          previewSimultaneousTurn(room.game, member.id, plan);
+          room.pendingActions.set(member.id, {
+            type: 'submit-turn',
+            actions: plan,
           });
-          const allSubmitted = livingMembers.every((m) =>
-            room.pendingActions.has(m.id),
-          );
-          if (allSubmitted) {
-            const actionsList = livingMembers.map((m) => ({
-              playerId: m.id,
-              action: room.pendingActions.get(m.id)!,
-            }));
-            room.pendingActions.clear();
-            room.game = resolveSimultaneousRound(room.game, actionsList);
-            if (room.mode === 'daily' && room.game.phase === 'won') {
-              storage.score(
-                room.runId,
-                room.date,
-                member.name,
-                room.game.turns,
-                Math.round((Date.now() - room.startedAt) / 1000),
-              );
-              storage.unlockAchievement(member.name, 'daily_win', room.date);
-            }
-          }
+          resolvePlans(room);
         } else {
           room.game = applyAction(room.game, member.id, data.action);
-          if (room.mode === 'daily' && room.game.phase === 'won') {
-            storage.score(
-              room.runId,
-              room.date,
-              member.name,
-              room.game.turns,
-              Math.round((Date.now() - room.startedAt) / 1000),
-            );
-            storage.unlockAchievement(member.name, 'daily_win', room.date);
-          }
+        }
+        if (room.mode === 'daily' && room.game.phase === 'won') {
+          storage.score(
+            room.runId,
+            room.date,
+            member.name,
+            room.game.turns,
+            Math.round((Date.now() - room.startedAt) / 1000),
+          );
+          storage.unlockAchievement(member.name, 'daily_win', room.date);
         }
         publish(room);
       }),
@@ -895,8 +1088,11 @@ export async function createApp(
           ) {
             m.forfeited = true;
             changed = true;
-            if (room.game) room.game = abandonPlayer(room.game, m.id);
-            else room.members = room.members.filter((v) => v.id !== m.id);
+            if (room.game) {
+              room.game = abandonPlayer(room.game, m.id);
+              room.pendingActions.delete(m.id);
+              resolvePlans(room);
+            } else room.members = room.members.filter((v) => v.id !== m.id);
             if (room.host === m.id)
               room.host = room.members.find((v) => !v.forfeited)?.id ?? '';
           }

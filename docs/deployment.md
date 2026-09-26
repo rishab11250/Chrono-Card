@@ -10,8 +10,10 @@ This is the simplest setup. Express serves the Vite build and Socket.IO from the
 2. Build with `npm ci && npm run build`; start with `npm start`.
 3. Set `CLIENT_ORIGIN` to the exact public HTTPS origin, such as `https://chrono-card.example.com`, without a trailing slash. `PORT` is supplied by most hosts.
 4. Supply `REDIS_URL` for restart recovery. Standard `redis://` and TLS `rediss://` URLs work. The URL must be a Redis protocol endpoint, not an HTTP/REST endpoint.
-5. Mount persistent storage and set `DATA_DIR` to its directory. SQLite stores completed daily scores there. Without a persistent disk, scores are lost when the instance is replaced.
+5. Mount persistent storage and set `DATA_DIR` to its directory. SQLite stores accounts, run receipts, replays, and daily scores there. Without a persistent disk, those records are lost when the instance is replaced.
 6. Use `/api/health` as the health check. `storage: "memory"` means Redis is not configured. A Redis connection or write failure returns 503.
+7. Set `NODE_ENV=production` and a private `AUTH_SECRET` of at least 32 bytes. Generate one with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`. Keep it stable across restarts; changing it signs everyone out. Production refuses to start without it. Development generates an ephemeral key when omitted.
+8. Set `TRUST_PROXY_HOPS` to the exact number of trusted proxies in front of Express (default 0; Render template 1). Do not enable blanket proxy trust: rate limits depend on the client IP.
 
 `render.yaml` supplies a single Render web service with a SQLite disk. Review its paid-plan/disk settings before applying; it is a configuration template, not an existing deployment. Provide `CLIENT_ORIGIN` and `REDIS_URL` in the dashboard. There is no cloud credential checked into the repository.
 
@@ -20,6 +22,8 @@ For a self-hosted setup:
 ```sh
 docker compose up --build
 ```
+
+Set `AUTH_SECRET` in your shell or Compose `.env` before this command. Compose requires it; Render generates its own private secret automatically.
 
 Open `http://localhost:3001`. Compose runs Redis with append-only persistence and gives the app a SQLite volume. For a public domain, change `CLIENT_ORIGIN`, terminate HTTPS at your reverse proxy, and forward WebSocket upgrade headers. Keep Redis on the private network.
 
@@ -50,8 +54,10 @@ For development, export the server variables before `npm run dev`. Vite reads cl
 - After a server restart, rooms are loaded lazily by code and previously connected players receive a fresh reconnect window. Both browser sessions need their original private tokens.
 - Tokens are sent only in private create/join/resume acknowledgements (or an HTTP create response), never in broadcast room views. They live in per-tab session storage. Invite and spectator URLs contain only public room codes.
 - An HTTP client can `POST /api/rooms` with JSON `{ "name": "Ada", "mode": "party" }`, then attach via `room:resume` using the returned session. HTTP room creation is limited to ten requests per minute per connection IP. Socket events have a per-connection limit.
-- Daily leaderboards are anonymous and unverified. The server accepts no client-submitted score: it inserts a score only after an authoritative daily win. Unique run IDs prevent duplicate submissions.
-- Back up the SQLite file and its WAL safely if scores become important. This is a hackathon game, with no user accounts or payment flow.
+- Daily leaderboard names are anonymous, but scores are server-verified: a score is inserted only after an authoritative daily win. Online account run statistics require the completed room's private player capability; run receipts prevent double counting. Offline personal statistics remain self-reported and must not be used as competitive rankings.
+- Accounts use asynchronous scrypt password hashing and expiring signed bearer tokens. Authentication writes are rate-limited. Browser account tokens remain in local storage; avoid untrusted scripts and keep HTTPS enabled. There is no payment flow.
+- Redis startup has a ten-second connection deadline. A failed queued write makes health unhealthy; later writes can recover instead of leaving the queue permanently rejected. Room snapshots include submitted simultaneous plans.
+- Back up SQLite consistently, including its WAL, before upgrading. The audit migration adds a run-receipt table and a case-insensitive unique username index. Existing case-colliding names cause an actionable startup error: resolve ownership manually in a backup-reviewed migration, never delete accounts automatically. Retain a pre-upgrade backup for rollback. Existing tokens from the old signing key are intentionally invalidated.
 
 ## Public smoke test checklist
 
@@ -64,7 +70,9 @@ For development, export the server variables before `npm run dev`. Vite reads cl
 - [ ] Refresh an active player's tab and confirm its turn/HP/hand are restored.
 - [ ] Briefly disconnect a device and verify the 90-second hold; verify forfeiture after expiry.
 - [ ] Finish a daily run, check the leaderboard, and confirm it survives a server restart.
-- [ ] Complete a multiplayer escape through all five rooms.
+- [ ] Complete a multiplayer escape through all three Acts (twelve rooms per route).
+- [ ] Submit simultaneous turns on both devices, refresh one after submission, and confirm the next round resolves once.
+- [ ] Register, sign in, restart the server, and confirm account access with the stable signing key.
 - [ ] Add the final client/server URLs to the submission HTML and regenerate the PDF.
 
 ## Regenerate submission PDF

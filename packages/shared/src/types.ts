@@ -108,8 +108,10 @@ export type GameState = {
   log: string[];
   revision: number;
 };
+export type PlayAction = { type: 'play'; card: number; target?: Position };
 export type GameAction =
-  | { type: 'play'; card: number; target?: Position }
+  | PlayAction
+  | { type: 'submit-turn'; actions: PlayAction[] }
   | { type: 'end' }
   | { type: 'choose-room'; roomId: string }
   | { type: 'draft-card'; cardId: CardId };
@@ -129,6 +131,7 @@ export type RoomView = {
   spectators: number;
   paused: boolean;
   graceSeconds: number;
+  submittedPlayers?: string[];
 };
 export type Session = { code: string; token: string; playerId: string };
 export type Reply<T = undefined> =
