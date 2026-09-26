@@ -220,9 +220,13 @@ try {
   const saved = restoreLocalGame(
     JSON.parse(localStorage.getItem('chrono-local-v1') ?? 'null'),
   );
-  game = saved ?? createGame('solo', [{ id: 'local-1', name: 'You' }], seed());
+  const myInitialName = auth.getUser()?.username ?? 'You';
+  game =
+    saved ??
+    createGame('solo', [{ id: 'local-1', name: myInitialName }], seed());
 } catch {
-  game = createGame('solo', [{ id: 'local-1', name: 'You' }], seed());
+  const myInitialName = auth.getUser()?.username ?? 'You';
+  game = createGame('solo', [{ id: 'local-1', name: myInitialName }], seed());
 }
 
 const COSMETICS = [
@@ -1757,15 +1761,32 @@ function online(prefill = '', watch = false) {
     }
     return;
   }
+  const user = auth.getUser();
+  const guestName = localStorage.getItem('chrono-guest-name') ?? '';
+  const initialName = user?.username ?? guestName;
+  const isGuest = !user;
   showModal(
     'Gather your party.',
-    `<p>Two to four explorers. One dungeon. A plan worth sharing.</p><form id="online-form"><label>Your name<input id="player-name" name="name" maxlength="20" value="Explorer" required autocomplete="nickname" /></label><div class="online-columns"><section><h3>Start something.</h3><p>A private room for your next adventure.</p><label>Party size<select id="room-mode"><option value="party">2–4 explorers</option><option value="duo">Duo · 2 explorers</option></select></label><label>Turn order<select id="room-turn-order"><option value="alternating">Alternating turns (classic)</option><option value="simultaneous">Simultaneous turns (fast)</option></select></label><button class="button primary" type="submit" name="intent" value="create">Create a room ↗</button></section><section><h3>Find your people.</h3><label>Room code<input id="room-code-input" name="code" maxlength="6" placeholder="ABC234" value="${escape(prefill)}" autocomplete="off" autocapitalize="characters" /></label><button class="button subtle" type="submit" name="intent" value="join">Join expedition ↗</button><button class="text-button" type="submit" name="intent" value="watch">${watch ? 'Watch this expedition ↗' : 'Just watching? Spectate'}</button></section></div><p id="form-error" class="form-error" role="alert"></p></form>`,
+    `<p>Two to four explorers. One dungeon. A plan worth sharing.</p><form id="online-form"><label>${isGuest ? 'Your temporary name (Guest)' : 'Your explorer name'}<input id="player-name" name="name" maxlength="20" placeholder="${isGuest ? 'Choose a temporary name for party' : 'Explorer name'}" value="${escape(initialName)}" required autocomplete="nickname" ${isGuest && !guestName ? 'autofocus' : ''} /></label>${isGuest ? '<p class="guest-name-hint" style="font-size:14px;opacity:0.8;margin:-4px 0 10px;">This temporary name will be visible to everyone in your party.</p>' : ''}<div class="online-columns"><section><h3>Start something.</h3><p>A private room for your next adventure.</p><label>Party size<select id="room-mode"><option value="party">2–4 explorers</option><option value="duo">Duo · 2 explorers</option></select></label><label>Turn order<select id="room-turn-order"><option value="alternating">Alternating turns (classic)</option><option value="simultaneous">Simultaneous turns (fast)</option></select></label><button class="button primary" type="submit" name="intent" value="create">Create a room ↗</button></section><section><h3>Find your people.</h3><label>Room code<input id="room-code-input" name="code" maxlength="6" placeholder="ABC234" value="${escape(prefill)}" autocomplete="off" autocapitalize="characters" /></label><button class="button subtle" type="submit" name="intent" value="join">Join expedition ↗</button><button class="text-button" type="submit" name="intent" value="watch">${watch ? 'Watch this expedition ↗' : 'Just watching? Spectate'}</button></section></div><p id="form-error" class="form-error" role="alert"></p></form>`,
     'ONLINE CO-OP',
   );
   $('#online-form').addEventListener('submit', (event) => {
     event.preventDefault();
     const intent = (event as SubmitEvent).submitter?.getAttribute('value');
-    const name = $<HTMLInputElement>('#player-name').value.trim();
+    const nameInput = $<HTMLInputElement>('#player-name');
+    const name = nameInput.value.trim();
+    if (!name) {
+      $('#form-error').textContent = 'Please choose a temporary explorer name.';
+      nameInput.focus();
+      return;
+    }
+    if (!auth.getUser()) {
+      try {
+        localStorage.setItem('chrono-guest-name', name);
+      } catch {
+        /* Storage unavailable */
+      }
+    }
     const code = $<HTMLInputElement>('#room-code-input')
       .value.trim()
       .toUpperCase();
@@ -1790,20 +1811,33 @@ async function daily() {
     online();
     return;
   }
+  const user = auth.getUser();
+  const guestName = localStorage.getItem('chrono-guest-name') ?? '';
+  const initialName = user?.username ?? guestName;
+  const isGuest = !user;
   showModal(
     'A new day. The same odds.',
-    '<p>Every explorer gets the same seed. Fewest turns wins; time breaks ties.</p><div id="leaderboard"><p>Loading today’s challenge…</p></div><form id="daily-form"><label>Your name<input id="daily-name" maxlength="20" value="Explorer" required /></label><p id="form-error" class="form-error" role="alert"></p><button type="submit" class="button primary">Take the daily challenge ↗</button></form>',
+    `<p>Every explorer gets the same seed. Fewest turns wins; time breaks ties.</p><div id="leaderboard"><p>Loading today’s challenge…</p></div><form id="daily-form"><label>${isGuest ? 'Your temporary name (Guest)' : 'Your explorer name'}<input id="daily-name" maxlength="20" placeholder="${isGuest ? 'Choose a temporary name' : 'Explorer name'}" value="${escape(initialName)}" required /></label><p id="form-error" class="form-error" role="alert"></p><button type="submit" class="button primary">Take the daily challenge ↗</button></form>`,
     'DAILY CHALLENGE · UTC',
   );
   $('#daily-form').addEventListener('submit', (event) => {
     event.preventDefault();
+    const nameInput = $<HTMLInputElement>('#daily-name');
+    const name = nameInput.value.trim();
+    if (!name) {
+      $('#form-error').textContent = 'Please enter a name.';
+      nameInput.focus();
+      return;
+    }
+    if (!auth.getUser()) {
+      try {
+        localStorage.setItem('chrono-guest-name', name);
+      } catch {
+        /* Storage unavailable */
+      }
+    }
     void safe(async () => {
-      await net.create(
-        $<HTMLInputElement>('#daily-name').value.trim(),
-        'daily',
-        'alternating',
-        getSelectedCosmetic(),
-      );
+      await net.create(name, 'daily', 'alternating', getSelectedCosmetic());
       await net.start();
     });
   });
@@ -1930,8 +1964,32 @@ $('#new-run').onclick = () =>
   void newLocal(game.mode === 'duo' && !room ? 'duo' : 'solo');
 $('#achievements-button').onclick = showAchievements;
 $('#profile-button').onclick = showProfileModal;
-auth.onChange = () => updateProfileBadge();
-void auth.init().then(() => updateProfileBadge());
+auth.onChange = () => {
+  updateProfileBadge();
+  const user = auth.getUser();
+  if (
+    user &&
+    !room &&
+    game.players.length === 1 &&
+    (game.players[0].name === 'You' || game.players[0].name === 'Explorer')
+  ) {
+    game.players[0].name = user.username;
+    render();
+  }
+};
+void auth.init().then(() => {
+  updateProfileBadge();
+  const user = auth.getUser();
+  if (
+    user &&
+    !room &&
+    game.players.length === 1 &&
+    (game.players[0].name === 'You' || game.players[0].name === 'Explorer')
+  ) {
+    game.players[0].name = user.username;
+    render();
+  }
+});
 $('#cosmetics-button').onclick = showCosmeticsModal;
 $('#help-button').onclick = help;
 $('#about-button').onclick = showAbout;

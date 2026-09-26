@@ -83,6 +83,7 @@ class Dungeon extends Phaser.Scene {
   ready = false;
   renderedLevel = -1;
   renderedTilesKey = '';
+  renderedSeed = -1;
 
   spawnCombatText(x: number, y: number, text: string, color = '#ffeb3b') {
     if (!this.ready || this.reduced()) return;
@@ -407,17 +408,29 @@ class Dungeon extends Phaser.Scene {
     const tilesKey = s.tiles
       ? s.tiles.join('')
       : (LEVELS[s.level]?.tiles?.join('') ?? '');
-    if (this.renderedLevel !== s.level || this.renderedTilesKey !== tilesKey) {
-      if (this.renderedLevel !== s.level) {
-        for (const p of this.players.values()) p.container.destroy();
+    const isNewGame = this.renderedSeed !== s.seed;
+    if (
+      this.renderedLevel !== s.level ||
+      this.renderedTilesKey !== tilesKey ||
+      isNewGame
+    ) {
+      if (this.renderedLevel !== s.level || isNewGame) {
+        for (const p of this.players.values()) {
+          this.tweens.killTweensOf(p.container);
+          p.container.destroy();
+        }
         this.players.clear();
-        for (const e of this.enemies.values()) e.container.destroy();
+        for (const e of this.enemies.values()) {
+          this.tweens.killTweensOf(e.container);
+          e.container.destroy();
+        }
         this.enemies.clear();
       }
 
       this.renderRoom(s.level);
       this.renderedLevel = s.level;
       this.renderedTilesKey = tilesKey;
+      this.renderedSeed = s.seed;
     }
     this.renderEntities(s, this.targets);
   }
@@ -654,6 +667,7 @@ class Dungeon extends Phaser.Scene {
     const activeEnemyIds = new Set(s.enemies.map((e) => e.id));
     for (const [id, tracked] of this.enemies.entries()) {
       if (!activeEnemyIds.has(id)) {
+        this.tweens.killTweensOf(tracked.container);
         tracked.container.destroy();
         this.enemies.delete(id);
       }
@@ -663,6 +677,12 @@ class Dungeon extends Phaser.Scene {
       const targetPx = e.x * T + 16;
       const targetPy = e.y * T + 16;
       let tracked = this.enemies.get(e.id);
+      if (tracked && tracked.kind !== e.kind) {
+        this.tweens.killTweensOf(tracked.container);
+        tracked.container.destroy();
+        this.enemies.delete(e.id);
+        tracked = undefined;
+      }
 
       if (!tracked) {
         const container = this.add.container(targetPx, targetPy);
@@ -740,6 +760,15 @@ class Dungeon extends Phaser.Scene {
             ? 'READY 1'
             : '',
       );
+    }
+
+    const activePlayerIds = new Set(s.players.map((p) => p.id));
+    for (const [id, tracked] of this.players.entries()) {
+      if (!activePlayerIds.has(id)) {
+        this.tweens.killTweensOf(tracked.container);
+        tracked.container.destroy();
+        this.players.delete(id);
+      }
     }
 
     s.players.forEach((p, i) => {
