@@ -1087,7 +1087,10 @@ function render() {
   $('#exit-note').innerHTML = room
     ? `<span>⌘</span><p>Room <strong>${room.code}</strong><br><button class="text-button" id="share-watch">Copy spectator link ↗</button></p>`
     : `<span>▥</span><p>${game.enemies.length ? 'Clear the room.' : 'The path is open.'}<br><strong>${game.enemies.length ? 'Find your way out.' : 'Reach the glowing exit.'}</strong></p>`;
-  $('#share-watch')?.addEventListener('click', () => void copyLink(true));
+  $('#share-watch')?.addEventListener(
+    'click',
+    (e) => void copyLink(true, e.currentTarget as HTMLElement),
+  );
   $('#hand-title').innerHTML =
     `${room && !playable ? `${escape(p.name)}’s hand` : game.players.length > 1 ? `${escape(p.name)}’s turn` : 'COMMAND DECK'}<span id="plays-badge">${game.plays} ${game.plays === 1 ? 'play' : 'plays'} left</span>`;
   const selectedCard = selected === null ? null : CARDS[p.hand[selected]];
@@ -1661,19 +1664,52 @@ async function newLocal(mode: 'solo' | 'duo') {
   render();
   modal.close();
 }
-async function copyLink(watch: boolean) {
+async function copyLink(watch: boolean, targetButton?: HTMLElement | null) {
   if (!room) return;
   const url = new URL(location.href);
   url.search = '';
   url.searchParams.set(watch ? 'watch' : 'room', room.code);
+  const text = url.href;
+
+  let success = false;
   try {
-    await navigator.clipboard.writeText(url.href);
-    toast(`${watch ? 'Spectator' : 'Invite'} link copied.`);
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      success = true;
+    }
   } catch {
-    showModal(
-      'Share this expedition',
-      `<label>Copy this link<input value="${escape(url.href)}" readonly /></label>`,
-    );
+    /* Fallback below */
+  }
+
+  if (!success) {
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      success = document.execCommand('copy');
+      textarea.remove();
+    } catch {
+      /* Fallback to prompt */
+    }
+  }
+
+  if (targetButton) {
+    const origText = targetButton.textContent;
+    targetButton.textContent = success ? '✓ Link copied!' : 'Copied!';
+    setTimeout(() => {
+      targetButton.textContent = origText;
+    }, 2500);
+  }
+
+  if (success) {
+    toast(`${watch ? 'Spectator' : 'Invite'} link copied.`);
+  } else {
+    window.prompt('Copy this expedition link:', text);
   }
 }
 function lobby() {
@@ -1684,8 +1720,10 @@ function lobby() {
     `<p>${room.mode === 'daily' ? 'The same dungeon and deck seed for everyone today. Finish the run to record your score.' : 'Share your code. Gather your party. Make it out together.'}</p><div class="room-code"><span>ROOM CODE</span><strong>${room.code}</strong><button id="copy-invite" class="text-button">Copy invite link ↗</button></div><div class="lobby-members">${room.members.map((m, i) => `<div><span class="member-number">0${i + 1}</span><strong>${escape(m.name)}</strong><span>${m.connected ? (m.id === room!.host ? 'HOST · READY' : 'READY') : 'RECONNECTING'}</span></div>`).join('')}${room.mode !== 'daily' && room.members.length < (room.mode === 'duo' ? 2 : 4) ? '<div class="waiting-slot">+ Waiting for another explorer…</div>' : ''}</div><p id="form-error" class="form-error" role="alert"></p><div class="dialog-actions"><button id="leave-lobby" class="button subtle">Leave room</button><button id="start-room" class="button primary" data-network ${!host || room.members.some((m) => !m.connected) || (room.mode !== 'daily' && room.members.length < 2) ? 'disabled' : ''}>${host ? 'Begin expedition ↗' : 'Waiting for host…'}</button><div class="emote-bar">${EMOTES.map((e) => `<button class="emote-btn" data-emote="${escape(e)}">${escape(e)}</button>`).join('')}</div></div><button id="spectator-link" class="text-button">Copy spectator link</button>`,
     room.mode === 'daily' ? 'DAILY CHALLENGE · UTC' : 'ONLINE EXPEDITION',
   );
-  $('#copy-invite').onclick = () => void copyLink(false);
-  $('#spectator-link').onclick = () => void copyLink(true);
+  $('#copy-invite').onclick = (e) =>
+    void copyLink(false, e.currentTarget as HTMLElement);
+  $('#spectator-link').onclick = (e) =>
+    void copyLink(true, e.currentTarget as HTMLElement);
   $('#leave-lobby').onclick = () =>
     void safe(async () => {
       await net.leave();
@@ -1713,7 +1751,8 @@ function online(prefill = '', watch = false) {
         `<p>Room <strong>${room.code}</strong> · ${room.spectators} spectators</p><div class="dialog-actions"><button id="online-share" class="button primary">Copy spectator link</button><button id="online-leave" class="button subtle">Leave expedition</button></div>`,
       );
     if (room.game) {
-      $('#online-share').onclick = () => void copyLink(true);
+      $('#online-share').onclick = (e) =>
+        void copyLink(true, e.currentTarget as HTMLElement);
       $('#online-leave').onclick = () => void newLocal('solo');
     }
     return;
