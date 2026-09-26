@@ -736,29 +736,30 @@ class Dungeon extends Phaser.Scene {
           tileY: p.y,
         };
         this.players.set(p.id, tracked);
-        tracked.ring.setVisible(isActive);
-        tracked.cursor.setVisible(isActive);
-        tracked.shield.setVisible(Boolean(p.shield));
-        tracked.container.setVisible(true);
+      }
+      // Reconcile existing sprites on every state update, not only on creation.
+      tracked.ring.setVisible(isActive);
+      tracked.cursor.setVisible(isActive);
+      tracked.shield.setVisible(Boolean(p.shield));
+      tracked.container.setVisible(true);
 
-        if (tracked.tileX !== p.x || tracked.tileY !== p.y) {
-          if (!this.reduced()) {
-            this.tweens.killTweensOf(tracked.container);
-            this.tweens.add({
-              targets: tracked.container,
-              x: targetPx,
-              y: targetPy,
-              duration: 180,
-              ease: 'Quad.easeOut',
-            });
-          } else {
-            tracked.container.setPosition(targetPx, targetPy);
-          }
-          tracked.tileX = p.x;
-          tracked.tileY = p.y;
-        } else if (!this.tweens.isTweening(tracked.container)) {
+      if (tracked.tileX !== p.x || tracked.tileY !== p.y) {
+        if (!this.reduced()) {
+          this.tweens.killTweensOf(tracked.container);
+          this.tweens.add({
+            targets: tracked.container,
+            x: targetPx,
+            y: targetPy,
+            duration: 180,
+            ease: 'Quad.easeOut',
+          });
+        } else {
           tracked.container.setPosition(targetPx, targetPy);
         }
+        tracked.tileX = p.x;
+        tracked.tileY = p.y;
+      } else if (!this.tweens.isTweening(tracked.container)) {
+        tracked.container.setPosition(targetPx, targetPy);
       }
     });
   }
