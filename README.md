@@ -1,6 +1,6 @@
 # Chrono Card
 
-A tactical dungeon crawler where your hand is your movement. Play an entire five-room expedition solo, pass the screen to a friend, or coordinate in a live party of up to four players. Enemies announce their next attack before you commit a card.
+A tactical dungeon crawler where your hand is your movement. Choose a route through 15 authored rooms across three Acts, draft new cards, and escape solo, on the same screen with a friend, or in a live party of up to four players. Enemies announce their attacks before they land.
 
 ## Run locally
 
@@ -25,8 +25,10 @@ Open **http://localhost:3001**. For a persistent Docker setup, use `docker compo
 ## Play
 
 - Select a card, then a highlighted tile. You get **two plays per turn**. Redraw costs no play.
-- **Red outlines** are the exact tiles enemies will attack next; small circles mark planned movement. Enemies attack, then move, after every living player has taken a turn.
-- Clear all enemies to unlock the exit. Reach the exit in the fifth room to win.
+- **Red outlines** strike next round; **purple outlines** show an elite's two-round charge. Small circles mark planned movement. Enemies attack, then move, after every living player has taken a turn. Bombers mark a tile in gold before leaving three-round embers that hurt only on entry.
+- Clear all enemies to unlock the exit. At each non-final exit, every explorer drafts one of three seeded cards. At forks, choose one of two described paths; they reunite before the Act boss. Reach the final Act's exit to win (a route visits 12 of the 15 authored rooms).
+- Draft Rift hop, Petal storm, Clockwork dart, Dew of dawn, or Ember forge. Forge permanently upgrades Iron edge to Iron edge+ for this run. Dart costs no play but all copies share a two-round cooldown.
+- Grey cards have **no valid targets right now**, but remain selectable. This is a preview, not deck filtering: every fresh hand still guarantees a movement and attack card. The same status is available to keyboard and screen-reader users.
 - Hazards deal 1 damage when entered. Dash skips intermediate hazards and crosses actors, but its landing tile must be free.
 - Each player has 12 HP. Entering a room restores 3 HP and revives fallen teammates. An abandoned online player stays out. The party loses when everyone falls.
 - In online mode, share the six-character room code or invite link. Spectator links grant view-only access. A disconnected player has **90 seconds** to resume before forfeiting.
@@ -78,6 +80,8 @@ The server does not implicitly load `.env` files. Export variables, configure yo
 
 ## Scope and constraints
 
-All core game modes, five-room content, spectator links, daily challenges, score persistence, tests, and PDF are implemented. Ghost replays and cosmetic unlocks are optional PRD ideas and are not included. The server is designed for **one long-lived instance**; Redis provides reconnect/restart snapshots, not distributed room ownership. Do not scale it horizontally without a shared lock/ownership design and a Socket.IO adapter. Scores identify an anonymous run/name, not a verified account. Hosting and the final public-link smoke test remain for deployment.
+The three-Act expansion adds graph-based routes, deterministic drafts, six new card IDs, six enemy kinds, and explicit threat budgets. See [mechanics and authoring notes](docs/progression.md). Upstream's authentication/profile, ghost replay, cosmetics, and tracked sprite rendering are retained. The original submission PDF describes the earlier milestone; this README and the mechanics notes describe the expanded game.
+
+The server is designed for **one long-lived instance**; Redis provides reconnect/restart snapshots, not distributed room ownership. Do not scale it horizontally without a shared lock/ownership design and a Socket.IO adapter. Daily scores identify a run/name. Hosting and the final public-link smoke test remain deferred at the owner's request.
 
 Artwork is original palette-limited pixel art, shared between Phaser sprites and SVG inventory portraits. The handheld-era interface uses locally bundled Press Start 2P and VT323 fonts; their OFL licenses are included in `packages/client/public/fonts`. The design skill guided the cohesive game screen, inventory panels, pixel hearts, and readable telegraphs. Each dungeon has its own palette, with animated flames, floating enemies, fireflies, defeat sparks, and damage feedback. Reduced-motion preferences disable these animations. Desktop places the command deck beside the world; mobile uses a horizontal card inventory below it.

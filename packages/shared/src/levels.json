@@ -22,10 +22,7 @@
             "##########"
           ],
           "choiceDescription": "Follow the moss-lit entrance into the ruins.",
-          "next": [
-            "cinder",
-            "archive"
-          ]
+          "next": ["cinder", "archive"]
         },
         {
           "id": "cinder",
@@ -42,9 +39,7 @@
             "############"
           ],
           "choiceDescription": "The safer-looking passage: open stone lanes and smoldering traps.",
-          "next": [
-            "chasm"
-          ]
+          "next": ["chasm"]
         },
         {
           "id": "archive",
@@ -63,9 +58,7 @@
             "##########"
           ],
           "choiceDescription": "The rewarding-looking archive: old treasures guarded by wandering sentinels.",
-          "next": [
-            "chasm"
-          ]
+          "next": ["chasm"]
         },
         {
           "id": "chasm",
@@ -86,9 +79,7 @@
             "########"
           ],
           "choiceDescription": "Narrow ledges lead toward the first warden.",
-          "next": [
-            "irongate"
-          ]
+          "next": ["irongate"]
         },
         {
           "id": "irongate",
@@ -113,12 +104,7 @@
         "baseThreat": 3,
         "threatPerDepth": 1,
         "threatPerAlly": 1,
-        "pool": [
-          "chaser",
-          "patroller",
-          "turret",
-          "bomber"
-        ],
+        "pool": ["chaser", "patroller", "turret", "bomber"],
         "boss": "warden_elite"
       }
     },
@@ -143,10 +129,7 @@
             "#############"
           ],
           "choiceDescription": "Stone bridges wind through the drowned galleries.",
-          "next": [
-            "corridor",
-            "clockwork"
-          ]
+          "next": ["corridor", "clockwork"]
         },
         {
           "id": "corridor",
@@ -163,9 +146,7 @@
             "##############"
           ],
           "choiceDescription": "The safer-looking corridor offers long lines of sight.",
-          "next": [
-            "colosseum"
-          ]
+          "next": ["colosseum"]
         },
         {
           "id": "clockwork",
@@ -184,9 +165,7 @@
             "##########"
           ],
           "choiceDescription": "The rewarding-looking hollow hides forgotten clockwork among its pillars.",
-          "next": [
-            "colosseum"
-          ]
+          "next": ["colosseum"]
         },
         {
           "id": "colosseum",
@@ -207,9 +186,7 @@
             "############"
           ],
           "choiceDescription": "Cross the open arena before the master vault.",
-          "next": [
-            "chronosmith"
-          ]
+          "next": ["chronosmith"]
         },
         {
           "id": "chronosmith",
@@ -235,13 +212,7 @@
         "baseThreat": 4,
         "threatPerDepth": 1,
         "threatPerAlly": 1,
-        "pool": [
-          "chaser",
-          "patroller",
-          "turret",
-          "bomber",
-          "chaser_elite"
-        ],
+        "pool": ["chaser", "patroller", "turret", "bomber", "chaser_elite"],
         "boss": "warden_elite"
       }
     },
@@ -266,10 +237,7 @@
             "###########"
           ],
           "choiceDescription": "Follow the broken causeway into the final Act.",
-          "next": [
-            "narthex",
-            "heart"
-          ]
+          "next": ["narthex", "heart"]
         },
         {
           "id": "narthex",
@@ -287,9 +255,7 @@
             "#############"
           ],
           "choiceDescription": "The safer-looking narthex offers many paths between its columns.",
-          "next": [
-            "penultimate"
-          ]
+          "next": ["penultimate"]
         },
         {
           "id": "heart",
@@ -308,9 +274,7 @@
             "##########"
           ],
           "choiceDescription": "The rewarding-looking hourglass chamber draws explorers toward its heart.",
-          "next": [
-            "penultimate"
-          ]
+          "next": ["penultimate"]
         },
         {
           "id": "penultimate",
@@ -329,9 +293,7 @@
             "############"
           ],
           "choiceDescription": "Reach the last gate beyond the fields of spikes.",
-          "next": [
-            "sanctum"
-          ]
+          "next": ["sanctum"]
         },
         {
           "id": "sanctum",
@@ -358,13 +320,7 @@
         "baseThreat": 5,
         "threatPerDepth": 1,
         "threatPerAlly": 1,
-        "pool": [
-          "chaser",
-          "patroller",
-          "turret",
-          "bomber",
-          "chaser_elite"
-        ],
+        "pool": ["chaser", "patroller", "turret", "bomber", "chaser_elite"],
         "boss": "warden_elite"
       }
     }

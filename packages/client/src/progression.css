@@ -1,1 +1,45 @@
-.progression-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:22px 0}.progression-option{display:flex;flex-direction:column;gap:12px;text-align:left;min-height:140px;padding:18px;border:3px solid #596477;background:#dbe2c2;color:#354654;box-shadow:inset 2px 2px #fff9d9,inset -2px -2px #99aa85}.progression-option strong{font-size:24px;font-weight:400}.progression-option span{font-size:20px;line-height:1.2}.progression-option:focus-visible{outline:4px solid #bd7945;outline-offset:3px}@media(max-width:600px){.progression-options{grid-template-columns:1fr;gap:12px}.progression-option{min-height:110px;padding:15px}.progression-option strong{font-size:25px}}
+.progression-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 22px 0;
+}
+.progression-option {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+  min-height: 140px;
+  padding: 18px;
+  border: 3px solid #596477;
+  background: #dbe2c2;
+  color: #354654;
+  box-shadow:
+    inset 2px 2px #fff9d9,
+    inset -2px -2px #99aa85;
+}
+.progression-option strong {
+  font-size: 24px;
+  font-weight: 400;
+}
+.progression-option span {
+  font-size: 20px;
+  line-height: 1.2;
+}
+.progression-option:focus-visible {
+  outline: 4px solid #bd7945;
+  outline-offset: 3px;
+}
+@media (max-width: 600px) {
+  .progression-options {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .progression-option {
+    min-height: 110px;
+    padding: 15px;
+  }
+  .progression-option strong {
+    font-size: 25px;
+  }
+}

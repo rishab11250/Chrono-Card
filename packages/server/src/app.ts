@@ -30,12 +30,7 @@ import {
   type UserProfile,
 } from '@chrono/shared';
 import { persistence, type StoredUser } from './persistence';
-import {
-  createToken,
-  hashPassword,
-  verifyPassword,
-  verifyToken,
-} from './auth';
+import { createToken, hashPassword, verifyPassword, verifyToken } from './auth';
 
 type StoredMember = Member & {
   token: string;
@@ -87,8 +82,18 @@ const actionSchema = z
     revision: z.number().int().min(0),
     action: z.discriminatedUnion('type', [
       z.object({ type: z.literal('end') }).strict(),
-      z.object({type: z.literal('choose-room'), roomId: z.string().min(1).max(60)}).strict(),
-      z.object({type:z.literal('draft-card'),cardId:z.enum(Object.keys(CARDS) as [CardId,...CardId[]])}).strict(),
+      z
+        .object({
+          type: z.literal('choose-room'),
+          roomId: z.string().min(1).max(60),
+        })
+        .strict(),
+      z
+        .object({
+          type: z.literal('draft-card'),
+          cardId: z.enum(Object.keys(CARDS) as [CardId, ...CardId[]]),
+        })
+        .strict(),
       z
         .object({
           type: z.literal('play'),
@@ -223,7 +228,8 @@ export async function createApp(
     }
   }
   function paused(room: Room) {
-    if (!room.game || room.game.phase === 'won' || room.game.phase === 'lost') return false;
+    if (!room.game || room.game.phase === 'won' || room.game.phase === 'lost')
+      return false;
     if (room.turnOrder === 'simultaneous' && room.game.phase === 'playing') {
       const living = room.game.players.filter((p) => p.hp > 0);
       return room.members.some(
@@ -423,7 +429,10 @@ export async function createApp(
       return;
     }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization',
+    );
     res.sendStatus(204);
   });
   app.post(
@@ -457,7 +466,7 @@ export async function createApp(
         res.status(400).json({
           error:
             error instanceof z.ZodError
-              ? error.issues[0]?.message ?? 'Invalid registration details.'
+              ? (error.issues[0]?.message ?? 'Invalid registration details.')
               : 'Unable to register.',
         });
       }
@@ -807,8 +816,15 @@ export async function createApp(
         if (data.revision !== room.game.revision)
           throw new Error('The board changed. Try your action again.');
 
-        if (room.turnOrder === 'simultaneous' && room.game.phase === 'playing') {
-          if (data.action.type === 'choose-room' || data.action.type === 'draft-card') throw new Error('No progression choice is pending.');
+        if (
+          room.turnOrder === 'simultaneous' &&
+          room.game.phase === 'playing'
+        ) {
+          if (
+            data.action.type === 'choose-room' ||
+            data.action.type === 'draft-card'
+          )
+            throw new Error('No progression choice is pending.');
           room.pendingActions.set(member.id, data.action);
           const livingMembers = room.members.filter((m) => {
             const p = room.game?.players.find((player) => player.id === m.id);

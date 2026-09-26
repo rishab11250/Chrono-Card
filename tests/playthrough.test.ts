@@ -24,7 +24,11 @@ it.each([
       20260924,
     );
     let actions = 0;
-    while (state.phase !== 'won' && state.phase !== 'lost' && actions < LEVELS.length * 300) {
+    while (
+      state.phase !== 'won' &&
+      state.phase !== 'lost' &&
+      actions < LEVELS.length * 300
+    ) {
       state = applyAction(state, activePlayer(state).id, chooseAction(state));
       actions++;
     }

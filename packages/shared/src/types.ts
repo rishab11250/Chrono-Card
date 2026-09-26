@@ -9,7 +9,13 @@ export type CardId =
   | 'shield'
   | 'redraw'
   | 'boost'
-  | 'taunt' | 'blink' | 'cleave' | 'quickshot' | 'mend' | 'forge' | 'strike_plus';
+  | 'taunt'
+  | 'blink'
+  | 'cleave'
+  | 'quickshot'
+  | 'mend'
+  | 'forge'
+  | 'strike_plus';
 export type Card = {
   id: CardId;
   name: string;
@@ -22,8 +28,19 @@ export type Card = {
   cost?: number;
   cooldown?: number;
 };
-export type EnemyKind = 'turret' | 'patroller' | 'chaser' | 'warden_elite' | 'bomber' | 'chaser_elite';
-export type EnemyIntent = { attack: Position[]; move?: Position; hazard?: Position[]; charging?: boolean };
+export type EnemyKind =
+  | 'turret'
+  | 'patroller'
+  | 'chaser'
+  | 'warden_elite'
+  | 'bomber'
+  | 'chaser_elite';
+export type EnemyIntent = {
+  attack: Position[];
+  move?: Position;
+  hazard?: Position[];
+  charging?: boolean;
+};
 export type TemporaryHazard = Position & { expiresRound: number };
 export type Enemy = Position & {
   id: string;
@@ -44,8 +61,16 @@ export type Level = {
   height: number;
 };
 export type Act = {
-  id: string; name: string; entry: string;
-  difficulty: { baseThreat: number; threatPerDepth: number; threatPerAlly: number; pool: EnemyKind[]; boss: EnemyKind };
+  id: string;
+  name: string;
+  entry: string;
+  difficulty: {
+    baseThreat: number;
+    threatPerDepth: number;
+    threatPerAlly: number;
+    pool: EnemyKind[];
+    boss: EnemyKind;
+  };
   rooms: Omit<Level, 'width' | 'height' | 'actId'>[];
 };
 export type Player = Position & {
@@ -84,7 +109,10 @@ export type GameState = {
   revision: number;
 };
 export type GameAction =
-  { type: 'play'; card: number; target?: Position } | { type: 'end' } | { type: 'choose-room'; roomId: string } | { type: 'draft-card'; cardId: CardId };
+  | { type: 'play'; card: number; target?: Position }
+  | { type: 'end' }
+  | { type: 'choose-room'; roomId: string }
+  | { type: 'draft-card'; cardId: CardId };
 export type Member = {
   id: string;
   name: string;

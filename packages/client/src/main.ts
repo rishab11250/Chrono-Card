@@ -1171,16 +1171,14 @@ function renderProgression() {
       `<p>${escape(activePlayer(game).name)}: choose one card to keep for this expedition. ${canDecide() ? '' : 'Waiting for their choice…'}</p><div class="progression-options draft-options">${(game.draftChoices[activePlayer(game).id] ?? []).map((id) => `<button class="progression-option" data-draft-card="${id}" ${canDecide() ? '' : 'disabled'}><span aria-hidden="true">${icon(id)}</span><strong>${escape(CARDS[id].name)}</strong><span>${escape(CARDS[id].description)}</span></button>`).join('')}</div>`,
       'DRAFT • KEEP ONE',
     );
-    modal
-      .querySelectorAll<HTMLButtonElement>('[data-draft-card]')
-      .forEach(
-        (button) =>
-          (button.onclick = () =>
-            void act({
-              type: 'draft-card',
-              cardId: button.dataset.draftCard as CardId,
-            })),
-      );
+    modal.querySelectorAll<HTMLButtonElement>('[data-draft-card]').forEach(
+      (button) =>
+        (button.onclick = () =>
+          void act({
+            type: 'draft-card',
+            cardId: button.dataset.draftCard as CardId,
+          })),
+    );
     modal
       .querySelector<HTMLButtonElement>('.progression-option:not(:disabled)')
       ?.focus();
@@ -1196,16 +1194,14 @@ function renderProgression() {
       .join('')}</div>`,
     'ROOM CLEARED',
   );
-  modal
-    .querySelectorAll<HTMLButtonElement>('[data-room-choice]')
-    .forEach(
-      (button) =>
-        (button.onclick = () =>
-          void act({
-            type: 'choose-room',
-            roomId: button.dataset.roomChoice!,
-          })),
-    );
+  modal.querySelectorAll<HTMLButtonElement>('[data-room-choice]').forEach(
+    (button) =>
+      (button.onclick = () =>
+        void act({
+          type: 'choose-room',
+          roomId: button.dataset.roomChoice!,
+        })),
+  );
   modal
     .querySelector<HTMLButtonElement>('.progression-option:not(:disabled)')
     ?.focus();

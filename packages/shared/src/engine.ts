@@ -20,47 +20,66 @@ export const CARDS = Object.fromEntries(
 ) as Record<CardId, Card>;
 export const ENEMIES = enemyData;
 export const ACTS = levelData.acts as Act[];
-export const LEVELS: Level[] = ACTS.flatMap(act => act.rooms.map((lvl) => ({
-  ...lvl,
-  actId: act.id,
-  width: lvl.tiles[0]?.length ?? 10,
-  height: lvl.tiles.length,
-})));
-export const levelIndex = (id: string) => LEVELS.findIndex(level => level.id === id);
+export const LEVELS: Level[] = ACTS.flatMap((act) =>
+  act.rooms.map((lvl) => ({
+    ...lvl,
+    actId: act.id,
+    width: lvl.tiles[0]?.length ?? 10,
+    height: lvl.tiles.length,
+  })),
+);
+export const levelIndex = (id: string) =>
+  LEVELS.findIndex((level) => level.id === id);
 /** Difficulty follows graph depth, never the room's position in the flat UI adapter. */
 export function roomThreatBudget(level: Level, partySize: number): number {
-  const act=ACTS.find(act=>act.id===level.actId)!;
-  const depths=new Map<string,number>();
-  const visit=(id:string,depth:number,path:Set<string>)=>{
-    if(path.has(id))throw new Error('Act room graphs must be acyclic.');
-    if((depths.get(id)??-1)>=depth)return;
-    depths.set(id,depth);
-    const room=act.rooms.find(room=>room.id===id);
-    if(!room)throw new Error('Room graph references an unknown room.');
-    room.next.forEach(next=>visit(next,depth+1,new Set([...path,id])));
+  const act = ACTS.find((act) => act.id === level.actId)!;
+  const depths = new Map<string, number>();
+  const visit = (id: string, depth: number, path: Set<string>) => {
+    if (path.has(id)) throw new Error('Act room graphs must be acyclic.');
+    if ((depths.get(id) ?? -1) >= depth) return;
+    depths.set(id, depth);
+    const room = act.rooms.find((room) => room.id === id);
+    if (!room) throw new Error('Room graph references an unknown room.');
+    room.next.forEach((next) => visit(next, depth + 1, new Set([...path, id])));
   };
-  visit(act.entry,0,new Set());
-  if(!depths.has(level.id))throw new Error('Room must be reachable from its Act entry.');
-  const budget=act.difficulty;
-  return budget.baseThreat + depths.get(level.id)! * budget.threatPerDepth + Math.max(0,partySize-1)*budget.threatPerAlly;
+  visit(act.entry, 0, new Set());
+  if (!depths.has(level.id))
+    throw new Error('Room must be reachable from its Act entry.');
+  const budget = act.difficulty;
+  return (
+    budget.baseThreat +
+    depths.get(level.id)! * budget.threatPerDepth +
+    Math.max(0, partySize - 1) * budget.threatPerAlly
+  );
 }
 function encounter(s: GameState): EnemyKind[] {
-  const level=LEVELS[s.level],act=ACTS.find(act=>act.id===level.actId)!;
-  let remaining=roomThreatBudget(level,s.players.filter(p=>!p.abandoned).length);
-  const roster:EnemyKind[]=[];
-  if(!level.next.length){roster.push(act.difficulty.boss);remaining-=ENEMIES[act.difficulty.boss].threat;}
-  while(remaining>0){
-    const pool=act.difficulty.pool.filter(kind=>ENEMIES[kind].threat<=remaining);
-    if(!pool.length)throw new Error('Enemy pool cannot fill the Act threat budget.');
-    const kind=pool[Math.floor(random(s)*pool.length)];
-    roster.push(kind);remaining-=ENEMIES[kind].threat;
+  const level = LEVELS[s.level],
+    act = ACTS.find((act) => act.id === level.actId)!;
+  let remaining = roomThreatBudget(
+    level,
+    s.players.filter((p) => !p.abandoned).length,
+  );
+  const roster: EnemyKind[] = [];
+  if (!level.next.length) {
+    roster.push(act.difficulty.boss);
+    remaining -= ENEMIES[act.difficulty.boss].threat;
+  }
+  while (remaining > 0) {
+    const pool = act.difficulty.pool.filter(
+      (kind) => ENEMIES[kind].threat <= remaining,
+    );
+    if (!pool.length)
+      throw new Error('Enemy pool cannot fill the Act threat budget.');
+    const kind = pool[Math.floor(random(s) * pool.length)];
+    roster.push(kind);
+    remaining -= ENEMIES[kind].threat;
   }
   return roster;
 }
 export function nextRoomIds(s: GameState): string[] {
   const level = LEVELS[s.level];
   if (level.next.length) return [...level.next];
-  const act = ACTS.findIndex(act => act.id === level.actId);
+  const act = ACTS.findIndex((act) => act.id === level.actId);
   return ACTS[act + 1] ? [ACTS[act + 1].entry] : [];
 }
 export const DIRECTIONS: Position[] = [
@@ -73,7 +92,11 @@ export const same = (a: Position, b: Position) => a.x === b.x && a.y === b.y;
 export const distance = (a: Position, b: Position) =>
   Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 export const tileAt = (s: GameState, p: Position) =>
-  (s.hazards ?? []).some(hazard => same(hazard,p) && hazard.expiresRound > s.round) ? '~' : LEVELS[s.level].tiles[p.y]?.[p.x] ?? '#';
+  (s.hazards ?? []).some(
+    (hazard) => same(hazard, p) && hazard.expiresRound > s.round,
+  )
+    ? '~'
+    : (LEVELS[s.level].tiles[p.y]?.[p.x] ?? '#');
 const livingAt = (s: GameState, p: Position) =>
   s.players.find((v) => v.hp > 0 && same(v, p));
 const enemyAt = (s: GameState, p: Position) =>
@@ -136,8 +159,11 @@ function planEnemies(s: GameState) {
     }
     e.intent = { attack: [] };
     if (e.kind === 'bomber') {
-      const nearest = [...living].sort((a,b)=>distance(e,a)-distance(e,b))[0];
-      if (nearest && LEVELS[s.level].tiles[nearest.y][nearest.x] !== 'E') e.intent.hazard = [{x:nearest.x,y:nearest.y}];
+      const nearest = [...living].sort(
+        (a, b) => distance(e, a) - distance(e, b),
+      )[0];
+      if (nearest && LEVELS[s.level].tiles[nearest.y][nearest.x] !== 'E')
+        e.intent.hazard = [{ x: nearest.x, y: nearest.y }];
     } else if (e.kind === 'turret') {
       const d = DIRECTIONS[e.heading % 4];
       for (let n = 1; n <= 3; n++) {
@@ -203,7 +229,8 @@ function planEnemies(s: GameState) {
         (p) => tileAt(s, p) !== '#' && !enemyAt(s, p) && !livingAt(s, p),
       );
     }
-    if (e.kind === 'chaser_elite' || e.kind === 'warden_elite') e.intent.charging = true;
+    if (e.kind === 'chaser_elite' || e.kind === 'warden_elite')
+      e.intent.charging = true;
   }
 }
 function loadLevel(s: GameState) {
@@ -239,8 +266,9 @@ function loadLevel(s: GameState) {
     }
   }
   const available = shuffle(s, [...spawnTiles]);
-  const roster=encounter(s);
-  if(roster.length>available.length)throw new Error('Room has insufficient floor space for its threat budget.');
+  const roster = encounter(s);
+  if (roster.length > available.length)
+    throw new Error('Room has insufficient floor space for its threat budget.');
   s.enemies = roster.map((kind, index) => ({
     kind,
     ...available[index],
@@ -340,8 +368,10 @@ function play(s: GameState, index: number, target?: Position) {
     throw new Error('Choose a card from your hand.');
   const id = p.hand[index];
   const card = CARDS[id];
-  if (s.plays < (card.cost ?? 1)) throw new Error('No plays left. End your turn.');
-  if ((p.cooldowns?.[id] ?? 0) > s.round) throw new Error('This card is recharging.');
+  if (s.plays < (card.cost ?? 1))
+    throw new Error('No plays left. End your turn.');
+  if ((p.cooldowns?.[id] ?? 0) > s.round)
+    throw new Error('This card is recharging.');
   const t =
     target ??
     (id === 'shield' || id === 'redraw' ? { x: p.x, y: p.y } : undefined);
@@ -355,19 +385,28 @@ function play(s: GameState, index: number, target?: Position) {
   const enemy = enemyAt(s, t);
   const ally = livingAt(s, t);
   if (id === 'blink') {
-    if (same(p,t) || distance(p,t)>card.range || enemy || ally) throw new Error('Choose an empty tile within 2 steps.');
-    Object.assign(p,t); hazard(s,p);
+    if (same(p, t) || distance(p, t) > card.range || enemy || ally)
+      throw new Error('Choose an empty tile within 2 steps.');
+    Object.assign(p, t);
+    hazard(s, p);
   } else if (id === 'cleave') {
-    if (!same(p,t) || !s.enemies.some(e=>distance(p,e)===1)) throw new Error('Stand beside an enemy and target yourself.');
-    s.enemies.forEach(e=>{if(distance(p,e)===1)e.hp-=2;});
-    s.enemies=s.enemies.filter(e=>e.hp>0);
+    if (!same(p, t) || !s.enemies.some((e) => distance(p, e) === 1))
+      throw new Error('Stand beside an enemy and target yourself.');
+    s.enemies.forEach((e) => {
+      if (distance(p, e) === 1) e.hp -= 2;
+    });
+    s.enemies = s.enemies.filter((e) => e.hp > 0);
   } else if (id === 'forge') {
-    const pile=[p.hand,p.deck,p.discard].find(pile=>pile.includes('strike'));
-    if (!same(p,t) || !pile) throw new Error('Target yourself with an Iron edge still in your deck.');
-    pile[pile.indexOf('strike')]='strike_plus';
+    const pile = [p.hand, p.deck, p.discard].find((pile) =>
+      pile.includes('strike'),
+    );
+    if (!same(p, t) || !pile)
+      throw new Error('Target yourself with an Iron edge still in your deck.');
+    pile[pile.indexOf('strike')] = 'strike_plus';
   } else if (id === 'mend') {
-    if (!ally || ally.hp>=ally.maxHp) throw new Error('Choose an injured living explorer.');
-    ally.hp=Math.min(ally.maxHp,ally.hp+3);
+    if (!ally || ally.hp >= ally.maxHp)
+      throw new Error('Choose an injured living explorer.');
+    ally.hp = Math.min(ally.maxHp, ally.hp + 3);
   } else if (id === 'step1' || id === 'step2' || id === 'dash') {
     const path = straightPath(p, t);
     if (!path.length || path.length > card.range)
@@ -398,7 +437,12 @@ function play(s: GameState, index: number, target?: Position) {
     }
     if (enemy) Object.assign(enemy, origin);
     hazard(s, p);
-  } else if (id === 'strike' || id === 'arrow' || id === 'strike_plus' || id === 'quickshot') {
+  } else if (
+    id === 'strike' ||
+    id === 'arrow' ||
+    id === 'strike_plus' ||
+    id === 'quickshot'
+  ) {
     const path = straightPath(p, t);
     if (
       !enemy ||
@@ -421,25 +465,31 @@ function play(s: GameState, index: number, target?: Position) {
     ally.bonus = Math.min(2, ally.bonus + 1);
   } else if (id === 'taunt') {
     if (!enemy) throw new Error('Choose an enemy to challenge.');
-    if (enemy.kind === 'bomber') enemy.intent.hazard = [{x:p.x,y:p.y}];
+    if (enemy.kind === 'bomber') enemy.intent.hazard = [{ x: p.x, y: p.y }];
     else enemy.intent.attack = [{ x: p.x, y: p.y }];
   }
   p.hand.splice(index, 1);
   p.discard.push(id);
   if (id === 'redraw') draw(s, p);
   else s.plays -= card.cost ?? 1;
-  if (card.cooldown) (p.cooldowns ??= {})[id]=s.round+card.cooldown;
+  if (card.cooldown) (p.cooldowns ??= {})[id] = s.round + card.cooldown;
   note(s, `${p.name} played ${card.name}.`);
 }
 function enemyTurn(s: GameState) {
-  s.hazards = (s.hazards ?? []).filter(hazard=>hazard.expiresRound > s.round + 1);
+  s.hazards = (s.hazards ?? []).filter(
+    (hazard) => hazard.expiresRound > s.round + 1,
+  );
   for (const e of s.enemies) {
     if (e.intent.charging) continue;
     for (const target of e.intent.hazard ?? []) {
-      if (LEVELS[s.level].tiles[target.y]?.[target.x] !== '.' && LEVELS[s.level].tiles[target.y]?.[target.x] !== '~') continue;
-      const existing = s.hazards.find(hazard=>same(hazard,target));
+      if (
+        LEVELS[s.level].tiles[target.y]?.[target.x] !== '.' &&
+        LEVELS[s.level].tiles[target.y]?.[target.x] !== '~'
+      )
+        continue;
+      const existing = s.hazards.find((hazard) => same(hazard, target));
       if (existing) existing.expiresRound = s.round + 4;
-      else s.hazards.push({...target,expiresRound:s.round+4});
+      else s.hazards.push({ ...target, expiresRound: s.round + 4 });
     }
     // Resolve the exact displayed coordinates, never recalculate an attack mid-round.
     for (const p of s.players.filter((v) => v.hp > 0))
@@ -477,12 +527,23 @@ function advance(s: GameState) {
   draw(s, p);
 }
 function finishDraft(s: GameState) {
-  const next=s.players.findIndex(p=>!p.abandoned && s.draftChoices[p.id]?.length);
-  if(next>=0){s.active=next;return;}
-  s.draftChoices={};
-  const choices=nextRoomIds(s);
-  if(choices.length>1){s.phase='choosing';s.roomChoices=choices;s.active=s.players.findIndex(p=>p.hp>0);}
-  else {s.level=levelIndex(choices[0]);loadLevel(s);}
+  const next = s.players.findIndex(
+    (p) => !p.abandoned && s.draftChoices[p.id]?.length,
+  );
+  if (next >= 0) {
+    s.active = next;
+    return;
+  }
+  s.draftChoices = {};
+  const choices = nextRoomIds(s);
+  if (choices.length > 1) {
+    s.phase = 'choosing';
+    s.roomChoices = choices;
+    s.active = s.players.findIndex((p) => p.hp > 0);
+  } else {
+    s.level = levelIndex(choices[0]);
+    loadLevel(s);
+  }
 }
 function checkOutcome(s: GameState) {
   if (s.players.every((p) => p.hp <= 0)) {
@@ -498,9 +559,15 @@ function checkOutcome(s: GameState) {
       s.phase = 'won';
       note(s, 'You escaped the cycle.');
     } else {
-      s.phase='drafting';
-      const pool=Object.values(CARDS).filter(card=>card.draft).map(card=>card.id);
-      s.draftChoices=Object.fromEntries(s.players.filter(p=>!p.abandoned).map(p=>[p.id,shuffle(s,[...pool]).slice(0,3)]));
+      s.phase = 'drafting';
+      const pool = Object.values(CARDS)
+        .filter((card) => card.draft)
+        .map((card) => card.id);
+      s.draftChoices = Object.fromEntries(
+        s.players
+          .filter((p) => !p.abandoned)
+          .map((p) => [p.id, shuffle(s, [...pool]).slice(0, 3)]),
+      );
       finishDraft(s);
       note(s, 'Room cleared. Each explorer may keep one new card.');
     }
@@ -511,13 +578,18 @@ export function applyAction(
   playerId: string,
   action: GameAction,
 ): GameState {
-  if (state.phase === 'won' || state.phase === 'lost') throw new Error('This expedition has ended.');
+  if (state.phase === 'won' || state.phase === 'lost')
+    throw new Error('This expedition has ended.');
   if (activePlayer(state).id !== playerId)
     throw new Error('Wait for your turn.');
   const s = structuredClone(state);
   if (s.phase === 'drafting') {
-    const p=activePlayer(s);
-    if(action.type!=='draft-card' || !s.draftChoices[p.id]?.includes(action.cardId)) throw new Error('Choose one of your offered cards.');
+    const p = activePlayer(s);
+    if (
+      action.type !== 'draft-card' ||
+      !s.draftChoices[p.id]?.includes(action.cardId)
+    )
+      throw new Error('Choose one of your offered cards.');
     p.discard.push(action.cardId);
     delete s.draftChoices[p.id];
     note(s, `${p.name} drafted ${CARDS[action.cardId].name}.`);
@@ -526,7 +598,8 @@ export function applyAction(
     return s;
   }
   if (s.phase === 'choosing') {
-    if (action.type !== 'choose-room' || !s.roomChoices.includes(action.roomId)) throw new Error('Choose one of the offered paths.');
+    if (action.type !== 'choose-room' || !s.roomChoices.includes(action.roomId))
+      throw new Error('Choose one of the offered paths.');
     s.level = levelIndex(action.roomId);
     loadLevel(s);
     s.revision++;
@@ -585,7 +658,8 @@ export function abandonPlayer(state: GameState, playerId: string): GameState {
   if (s.players.every((v) => v.hp <= 0)) s.phase = 'lost';
   else if (activePlayer(s).id === playerId) {
     if (s.phase === 'drafting') finishDraft(s);
-    else if (s.phase === 'choosing') s.active = s.players.findIndex(p => p.hp > 0);
+    else if (s.phase === 'choosing')
+      s.active = s.players.findIndex((p) => p.hp > 0);
     else advance(s);
   }
   s.revision++;
