@@ -79,14 +79,21 @@ function candidates(s: GameState): { state: GameState; action: GameAction }[] {
     if (
       id === 'redraw' ||
       id === 'shield' ||
+      id === 'shield_plus' ||
       id === 'mend' ||
       id === 'cleave' ||
-      id === 'forge'
+      id === 'forge' ||
+      id === 'time_rewind'
     )
       targets = [{ x: p.x, y: p.y }];
     else if (CARDS[id].category === 'attack' || id === 'taunt')
       targets = s.enemies;
-    else if (id === 'boost')
+    else if (id === 'decoy') {
+      targets = [];
+      for (let y = 1; y < maxH; y++)
+        for (let x = 1; x < maxW; x++)
+          if (distance(p, { x, y }) <= CARDS[id].range) targets.push({ x, y });
+    } else if (id === 'boost')
       targets = s.players.filter((v) => v.id !== p.id && v.hp > 0);
     else {
       targets = [];

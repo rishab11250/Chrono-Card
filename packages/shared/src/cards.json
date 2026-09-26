@@ -69,8 +69,37 @@
     "name": "Ember forge",
     "category": "support",
     "icon": "⚒",
-    "description": "Target yourself: permanently upgrade one Iron edge in your hand, draw pile, or discard to Iron edge+.",
+    "description": "Target yourself: permanently upgrade an Iron edge, Light lance, Step II, or Aegis in your deck.",
     "range": 0,
+    "draft": true
+  },
+  {
+    "id": "pierce",
+    "name": "Pierce",
+    "category": "attack",
+    "icon": "➶",
+    "description": "Deal 2 damage to all enemies in a straight line up to 3 tiles.",
+    "range": 3,
+    "draft": true
+  },
+  {
+    "id": "time_rewind",
+    "name": "Time rewind",
+    "category": "support",
+    "icon": "⟳",
+    "description": "Target self: restore 1 play this turn and remove 1 negative status.",
+    "range": 0,
+    "cost": 0,
+    "cooldown": 2,
+    "draft": true
+  },
+  {
+    "id": "decoy",
+    "name": "Decoy",
+    "category": "support",
+    "icon": "♟",
+    "description": "Deploy a decoy dummy with 2 HP up to 2 tiles away. Enemies target it if closer.",
+    "range": 2,
     "draft": true
   },
   {
@@ -80,6 +109,33 @@
     "icon": "⚔",
     "description": "Deal 3 damage to an adjacent enemy. Forged for this expedition.",
     "range": 1
+  },
+  {
+    "id": "arrow_plus",
+    "name": "Light lance+",
+    "category": "attack",
+    "icon": "➶",
+    "description": "Deal 3 damage in a straight line, up to 3 tiles away. Forged for this expedition.",
+    "range": 3,
+    "draft": true
+  },
+  {
+    "id": "step3",
+    "name": "Step III",
+    "category": "move",
+    "icon": "⇛",
+    "description": "Move up to 3 tiles in a straight line.",
+    "range": 3,
+    "draft": true
+  },
+  {
+    "id": "shield_plus",
+    "name": "Aegis+",
+    "category": "support",
+    "icon": "◇",
+    "description": "Block up to 2 hits. Target yourself or a living ally.",
+    "range": 10,
+    "draft": true
   },
   {
     "id": "step1",

@@ -1,0 +1,20 @@
+{
+  "shrine_of_vitality": {
+    "id": "shrine_of_vitality",
+    "name": "Shrine of Vitality",
+    "description": "A quiet shrine hums with chronal warmth. Heal 3 HP.",
+    "effect": "heal_3"
+  },
+  "time_forge": {
+    "id": "time_forge",
+    "name": "Time Forge",
+    "description": "An abandoned anvil glowing with embers. Upgrade a card in your deck.",
+    "effect": "upgrade_card"
+  },
+  "curious_merchant": {
+    "id": "curious_merchant",
+    "name": "Curious Merchant",
+    "description": "A hooded traveler offers a rare relic in exchange for 3 HP.",
+    "effect": "trade_hp_for_relic"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "dense_fog": {
+    "id": "dense_fog",
+    "name": "Dense Fog",
+    "description": "All projectile ranges reduced by 1 (min 1)."
+  },
+  "unstable_ground": {
+    "id": "unstable_ground",
+    "name": "Unstable Ground",
+    "description": "Hazards deal +1 damage."
+  },
+  "temporal_surge": {
+    "id": "temporal_surge",
+    "name": "Temporal Surge",
+    "description": "Explorers start with 3 plays on turn 1 of each room."
+  }
+}

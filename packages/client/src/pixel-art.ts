@@ -452,6 +452,16 @@ sprites.bomber = [
 sprites.shockwave = sprites.cleave;
 sprites.chain_spark = sprites.arrow;
 sprites.snare = sprites.taunt;
+sprites.healer = sprites.mend;
+sprites.shield_bearer = sprites.warden_elite;
+sprites.teleporter = sprites.blink;
+sprites.summoner = sprites.chaser_elite;
+sprites.pierce = sprites.arrow;
+sprites.time_rewind = sprites.redraw;
+sprites.decoy = sprites.explorer;
+sprites.arrow_plus = sprites.arrow;
+sprites.step3 = sprites.step2;
+sprites.shield_plus = sprites.shield;
 export function pixelSvg(name: string) {
   const rows = sprites[name] ?? sprites.explorer;
   return `<svg class="pixel-sprite" viewBox="0 0 ${Math.max(...rows.map((r) => r.length))} ${rows.length}" shape-rendering="crispEdges" aria-hidden="true">${rows.flatMap((row, y) => [...row].map((p, x) => (palette[p] ? `<rect x="${x}" y="${y}" width="1" height="1" fill="${palette[p]}"/>` : ''))).join('')}</svg>`;

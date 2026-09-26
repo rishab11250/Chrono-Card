@@ -13,12 +13,20 @@ import type {
   Position,
   TurnOrder,
   Act,
+  Enemy,
   EnemyKind,
   PlayAction,
   Relic,
   StatusEffect,
   StatusType,
 } from './types';
+import {
+  planHealer,
+  planShieldBearer,
+  planTeleporter,
+  planSummoner,
+} from './enemy-ai';
+import { handleBreakableWall } from './world';
 
 export const CARDS = Object.fromEntries(
   cardData.map((card) => [card.id, card]),
@@ -97,17 +105,28 @@ export const DIRECTIONS: Position[] = [
 export const same = (a: Position, b: Position) => a.x === b.x && a.y === b.y;
 export const distance = (a: Position, b: Position) =>
   Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
-export const tileAt = (s: GameState, p: Position) =>
-  (s.hazards ?? []).some(
-    (hazard) => same(hazard, p) && hazard.expiresRound > s.round,
+export const tileAt = (s: GameState, p: Position) => {
+  if (
+    (s.hazards ?? []).some(
+      (hazard) => same(hazard, p) && hazard.expiresRound > s.round,
+    )
   )
-    ? '~'
-    : (LEVELS[s.level].tiles[p.y]?.[p.x] ?? '#');
+    return '~';
+  if (s.tiles) {
+    return s.tiles[p.y]?.[p.x] ?? '#';
+  }
+  return LEVELS[s.level]?.tiles[p.y]?.[p.x] ?? '#';
+};
 const livingAt = (s: GameState, p: Position) =>
   s.players.find((v) => v.hp > 0 && same(v, p));
 const enemyAt = (s: GameState, p: Position) =>
   s.enemies.find((v) => same(v, p));
-function nearestLiving(living: Player[], pos: Position): Player | undefined {
+const decoyAt = (s: GameState, p: Position) =>
+  (s.decoys ?? []).find((v) => v.hp > 0 && same(v, p));
+function nearestLiving<T extends Position>(
+  living: T[],
+  pos: Position,
+): T | undefined {
   if (!living.length) return undefined;
   return living.reduce((a, b) =>
     distance(pos, a) <= distance(pos, b) ? a : b,
@@ -129,6 +148,7 @@ function shuffle<T>(s: GameState, values: T[]) {
   return values;
 }
 function draw(s: GameState, p: Player) {
+  p.lastCardCategory = undefined;
   p.discard.push(...p.hand);
   p.hand = [];
   if (p.deck.length < 7) {
@@ -148,8 +168,11 @@ function draw(s: GameState, p: Player) {
     if (index >= 0) p.hand.push(...p.deck.splice(index, 1));
   }
   const handSize = 5 + ((p.relics ?? []).includes('deep_pockets') ? 1 : 0);
-  while (p.hand.length < handSize && p.deck.length)
-    p.hand.push(p.deck.shift()!);
+  while (p.hand.length < handSize && p.deck.length) {
+    const uniqueIndex = p.deck.findIndex((id) => !p.hand.includes(id));
+    if (uniqueIndex >= 0) p.hand.push(...p.deck.splice(uniqueIndex, 1));
+    else p.hand.push(p.deck.shift()!);
+  }
 }
 function hit(s: GameState, p: Player, damage: number) {
   if (p.shield > 0) {
@@ -158,6 +181,14 @@ function hit(s: GameState, p: Player, damage: number) {
   } else {
     p.hp = Math.max(0, p.hp - damage);
     note(s, `${p.name} takes ${damage} damage.`);
+  }
+}
+function damageEnemy(s: GameState, e: Enemy, damage: number) {
+  if (e.shield && e.shield > 0) {
+    e.shield--;
+    note(s, `${ENEMIES[e.kind].name}'s shield absorbs the hit.`);
+  } else {
+    e.hp -= damage;
   }
 }
 function hazard(s: GameState, p: Player) {
@@ -185,23 +216,33 @@ function tickStatuses(target: { statuses?: StatusEffect[] }) {
     .filter((s) => s.rounds > 0);
 }
 function planEnemies(s: GameState) {
-  const living = s.players.filter((p) => p.hp > 0);
+  const living = [
+    ...s.players.filter((p) => p.hp > 0),
+    ...(s.decoys ?? []).filter((d) => d.hp > 0),
+  ];
   for (const e of s.enemies) {
     if (e.intent.charging) {
       // Keep exactly the same coordinates for the second announced round.
       e.intent.charging = false;
       continue;
     }
-    e.intent = { attack: [] };
     if (e.kind === 'bomber') {
       const nearest = nearestLiving(living, e);
       if (nearest && LEVELS[s.level].tiles[nearest.y][nearest.x] !== 'E')
         e.intent.hazard = [{ x: nearest.x, y: nearest.y }];
+    } else if (e.kind === 'healer') {
+      planHealer(s, e);
+    } else if (e.kind === 'shield_bearer') {
+      planShieldBearer(s, e);
+    } else if (e.kind === 'teleporter') {
+      planTeleporter(s, e);
+    } else if (e.kind === 'summoner') {
+      planSummoner(s, e);
     } else if (e.kind === 'turret') {
       const d = DIRECTIONS[e.heading % 4];
       for (let n = 1; n <= 3; n++) {
         const p = { x: e.x + d.x * n, y: e.y + d.y * n };
-        if (tileAt(s, p) === '#') break;
+        if (tileAt(s, p) === '#' || tileAt(s, p) === 'B') break;
         e.intent.attack.push(p);
       }
     } else if (e.kind === 'warden_elite') {
@@ -210,7 +251,7 @@ function planEnemies(s: GameState) {
         for (const d of DIRECTIONS) {
           for (let n = 1; n <= 2; n++) {
             const p = { x: e.x + d.x * n, y: e.y + d.y * n };
-            if (tileAt(s, p) === '#') break;
+            if (tileAt(s, p) === '#' || tileAt(s, p) === 'B') break;
             e.intent.attack.push(p);
           }
         }
@@ -220,7 +261,8 @@ function planEnemies(s: GameState) {
           for (let dx = -1; dx <= 1; dx++) {
             if (dx === 0 && dy === 0) continue;
             const p = { x: e.x + dx, y: e.y + dy };
-            if (tileAt(s, p) !== '#') e.intent.attack.push(p);
+            if (tileAt(s, p) !== '#' && tileAt(s, p) !== 'B')
+              e.intent.attack.push(p);
           }
       }
       // Move toward nearest player if within range 4
@@ -231,14 +273,19 @@ function planEnemies(s: GameState) {
           y: e.y + d.y,
         })).sort((a, b) => distance(a, nearest) - distance(b, nearest));
         e.intent.move = candidates.find(
-          (p) => tileAt(s, p) !== '#' && !enemyAt(s, p) && !livingAt(s, p),
+          (p) =>
+            tileAt(s, p) !== '#' &&
+            tileAt(s, p) !== 'B' &&
+            !enemyAt(s, p) &&
+            !livingAt(s, p) &&
+            !decoyAt(s, p),
         );
       }
     } else {
       e.intent.attack = DIRECTIONS.map((d) => ({
         x: e.x + d.x,
         y: e.y + d.y,
-      })).filter((p) => tileAt(s, p) !== '#');
+      })).filter((p) => tileAt(s, p) !== '#' && tileAt(s, p) !== 'B');
       let candidates: Position[];
       if (e.kind === 'patroller') {
         const direction = e.heading % 2 ? 1 : -1;
@@ -255,7 +302,12 @@ function planEnemies(s: GameState) {
           : [];
       }
       e.intent.move = candidates.find(
-        (p) => tileAt(s, p) !== '#' && !enemyAt(s, p) && !livingAt(s, p),
+        (p) =>
+          tileAt(s, p) !== '#' &&
+          tileAt(s, p) !== 'B' &&
+          !enemyAt(s, p) &&
+          !livingAt(s, p) &&
+          !decoyAt(s, p),
       );
     }
     if (e.kind === 'chaser_elite' || e.kind === 'warden_elite')
@@ -264,6 +316,8 @@ function planEnemies(s: GameState) {
 }
 function loadLevel(s: GameState) {
   s.hazards = [];
+  s.decoys = [];
+  s.tiles = undefined;
   s.phase = 'playing';
   s.roomChoices = [];
   s.visitedRooms = [...(s.visitedRooms ?? []), LEVELS[s.level].id];
@@ -279,6 +333,7 @@ function loadLevel(s: GameState) {
     p.hp = p.abandoned ? 0 : Math.min(p.maxHp, Math.max(3, p.hp + 3));
     p.shield = 0;
     p.bonus = 0;
+    p.lastCardCategory = undefined;
     const relics = p.relics ?? [];
     if (relics.includes('swift_boots')) p.bonus += 1;
     if (relics.includes('ember_shield')) p.shield = Math.max(p.shield, 1);
@@ -349,6 +404,7 @@ export function createGame(
     roomChoices: [],
     draftChoices: {},
     hazards: [],
+    decoys: [],
     players: [],
     enemies: [],
     log: [],
@@ -367,17 +423,17 @@ export function createGame(
     deck: shuffle(state, [
       'step1',
       'step2',
-      'step2',
-      'dash',
       'dash',
       'swap',
-      'strike',
-      'strike',
+      'blink',
       'strike',
       'arrow',
-      'arrow',
+      'cleave',
+      'quickshot',
+      'shockwave',
+      'pierce',
       'shield',
-      'shield',
+      'snare',
       'redraw',
       ...(names.length > 1 ? (['boost', 'taunt'] as CardId[]) : []),
     ] as CardId[]),
@@ -406,52 +462,99 @@ function play(s: GameState, index: number, target?: Position) {
     throw new Error('This card is recharging.');
   const t =
     target ??
-    (id === 'shield' || id === 'redraw' ? { x: p.x, y: p.y } : undefined);
+    (id === 'shield' ||
+    id === 'shield_plus' ||
+    id === 'redraw' ||
+    id === 'time_rewind' ||
+    id === 'forge'
+      ? { x: p.x, y: p.y }
+      : undefined);
   if (
     !t ||
     !Number.isInteger(t.x) ||
     !Number.isInteger(t.y) ||
-    tileAt(s, t) === '#'
+    tileAt(s, t) === '#' ||
+    (tileAt(s, t) === 'B' && card.category !== 'attack')
   )
     throw new Error('Choose a floor tile.');
+  const isCombo = p.lastCardCategory === 'move' && card.category === 'attack';
+  const comboBonus = isCombo ? 1 : 0;
   const enemy = enemyAt(s, t);
   const ally = livingAt(s, t);
   if (id === 'blink') {
-    if (same(p, t) || distance(p, t) > card.range || enemy || ally)
+    if (
+      same(p, t) ||
+      distance(p, t) > card.range ||
+      enemy ||
+      ally ||
+      decoyAt(s, t)
+    )
       throw new Error('Choose an empty tile within 2 steps.');
     Object.assign(p, t);
     hazard(s, p);
   } else if (id === 'cleave') {
-    if (!same(p, t) || !s.enemies.some((e) => distance(p, e) === 1))
+    const hasEnemyAdj = s.enemies.some((e) => distance(p, e) === 1);
+    const hasWallAdj = DIRECTIONS.some(
+      (d) => tileAt(s, { x: p.x + d.x, y: p.y + d.y }) === 'B',
+    );
+    if (!same(p, t) || (!hasEnemyAdj && !hasWallAdj))
       throw new Error('Stand beside an enemy and target yourself.');
     s.enemies.forEach((e) => {
       if (distance(p, e) === 1)
-        e.hp -=
-          2 + ((activePlayer(s).relics ?? []).includes('sharp_edge') ? 1 : 0);
+        damageEnemy(
+          s,
+          e,
+          2 +
+            ((activePlayer(s).relics ?? []).includes('sharp_edge') ? 1 : 0) +
+            comboBonus,
+        );
     });
     s.enemies = s.enemies.filter((e) => e.hp > 0);
+    handleBreakableWall(s, p);
   } else if (id === 'forge') {
-    const pile = [p.hand, p.deck, p.discard].find((pile) =>
-      pile.includes('strike'),
-    );
-    if (!same(p, t) || !pile)
+    if (!same(p, t))
       throw new Error('Target yourself with an Iron edge still in your deck.');
-    pile[pile.indexOf('strike')] = 'strike_plus';
+    const piles = [p.hand, p.deck, p.discard];
+    const upgradeMap: [CardId, CardId][] = [
+      ['strike', 'strike_plus'],
+      ['arrow', 'arrow_plus'],
+      ['step2', 'step3'],
+      ['shield', 'shield_plus'],
+    ];
+    let upgraded = false;
+    for (const [from, to] of upgradeMap) {
+      const pile = piles.find((pl) => pl.includes(from));
+      if (pile) {
+        pile[pile.indexOf(from)] = to;
+        upgraded = true;
+        break;
+      }
+    }
+    if (!upgraded)
+      throw new Error('Target yourself with an Iron edge still in your deck.');
   } else if (id === 'mend') {
     if (!ally || ally.hp >= ally.maxHp)
       throw new Error('Choose an injured living explorer.');
     ally.hp = Math.min(ally.maxHp, ally.hp + 3);
-  } else if (id === 'step1' || id === 'step2' || id === 'dash') {
+  } else if (
+    id === 'step1' ||
+    id === 'step2' ||
+    id === 'step3' ||
+    id === 'dash'
+  ) {
     const path = straightPath(p, t);
     if (!path.length || path.length > card.range)
       throw new Error(`Move 1–${card.range} tiles.`);
     if (
       enemy ||
       ally ||
+      decoyAt(s, t) ||
+      tileAt(s, t) === 'B' ||
       path.some(
         (v) =>
           tileAt(s, v) === '#' ||
-          (id !== 'dash' && (enemyAt(s, v) || livingAt(s, v))),
+          tileAt(s, v) === 'B' ||
+          (id !== 'dash' && (enemyAt(s, v) || livingAt(s, v) || decoyAt(s, v))),
       )
     )
       throw new Error('That path is blocked.');
@@ -461,7 +564,11 @@ function play(s: GameState, index: number, target?: Position) {
       if (p.hp === 0) break;
     }
   } else if (id === 'swap') {
-    if (same(p, t) || (!(ally && ally.id !== p.id) && distance(p, t) !== 1))
+    if (
+      tileAt(s, t) === 'B' ||
+      same(p, t) ||
+      (!(ally && ally.id !== p.id) && distance(p, t) !== 1)
+    )
       throw new Error('Choose an adjacent tile or a living ally.');
     const origin = { x: p.x, y: p.y };
     Object.assign(p, t);
@@ -472,9 +579,17 @@ function play(s: GameState, index: number, target?: Position) {
     if (enemy) {
       Object.assign(enemy, origin);
       if (tileAt(s, origin) === '~') {
-        enemy.hp -= 1;
+        damageEnemy(s, enemy, 1);
         note(s, `${ENEMIES[enemy.kind].name} takes hazard damage.`);
         s.enemies = s.enemies.filter((e) => e.hp > 0);
+      }
+    }
+    const decoy = decoyAt(s, t);
+    if (decoy) {
+      Object.assign(decoy, origin);
+      if (tileAt(s, origin) === '~') {
+        decoy.hp -= 1;
+        s.decoys = (s.decoys ?? []).filter((d) => d.hp > 0);
       }
     }
     hazard(s, p);
@@ -482,26 +597,51 @@ function play(s: GameState, index: number, target?: Position) {
     id === 'strike' ||
     id === 'arrow' ||
     id === 'strike_plus' ||
+    id === 'arrow_plus' ||
     id === 'quickshot'
   ) {
     const path = straightPath(p, t);
+    const isTargetWall = tileAt(s, t) === 'B';
     if (
-      !enemy ||
+      (!enemy && !isTargetWall) ||
       !path.length ||
       path.length > card.range ||
       path
         .slice(0, -1)
-        .some((v) => tileAt(s, v) === '#' || enemyAt(s, v) || livingAt(s, v))
+        .some(
+          (v) =>
+            tileAt(s, v) === '#' ||
+            tileAt(s, v) === 'B' ||
+            enemyAt(s, v) ||
+            livingAt(s, v) ||
+            decoyAt(s, v),
+        )
     )
       throw new Error('Choose an enemy in clear range.');
-    const bonus = (activePlayer(s).relics ?? []).includes('sharp_edge') ? 1 : 0;
-    enemy.hp -= (id === 'strike_plus' ? 3 : id === 'quickshot' ? 1 : 2) + bonus;
-    s.enemies = s.enemies.filter((e) => e.hp > 0);
-  } else if (id === 'shield') {
+    if (enemy) {
+      const bonus = (activePlayer(s).relics ?? []).includes('sharp_edge')
+        ? 1
+        : 0;
+      damageEnemy(
+        s,
+        enemy,
+        (id === 'strike_plus' || id === 'arrow_plus'
+          ? 3
+          : id === 'quickshot'
+            ? 1
+            : 2) +
+          bonus +
+          comboBonus,
+      );
+      s.enemies = s.enemies.filter((e) => e.hp > 0);
+    }
+    handleBreakableWall(s, t);
+  } else if (id === 'shield' || id === 'shield_plus') {
     if (!ally) throw new Error('Choose yourself or a living ally.');
-    if (ally.shield >= 1)
+    const maxShield = id === 'shield_plus' ? 2 : 1;
+    if (ally.shield >= maxShield)
       throw new Error('That explorer already has a shield.');
-    ally.shield = 1;
+    ally.shield = maxShield;
   } else if (id === 'boost') {
     if (!ally || ally.id === p.id) throw new Error('Choose a living ally.');
     ally.bonus = Math.min(2, ally.bonus + 1);
@@ -512,17 +652,28 @@ function play(s: GameState, index: number, target?: Position) {
   } else if (id === 'shockwave') {
     if (!same(p, t)) throw new Error('Target yourself to unleash the wave.');
     const adjacent = s.enemies.filter((e) => distance(p, e) === 1);
-    if (!adjacent.length) throw new Error('No adjacent enemies to push.');
+    const hasWallAdj = DIRECTIONS.some(
+      (d) => tileAt(s, { x: p.x + d.x, y: p.y + d.y }) === 'B',
+    );
+    if (!adjacent.length && !hasWallAdj)
+      throw new Error('No adjacent enemies to push.');
     for (const e of adjacent) {
       const dx = Math.sign(e.x - p.x);
       const dy = Math.sign(e.y - p.y);
       const dest = { x: e.x + dx, y: e.y + dy };
-      e.hp -= 1;
-      if (tileAt(s, dest) !== '#' && !enemyAt(s, dest) && !livingAt(s, dest)) {
+      damageEnemy(s, e, 1 + comboBonus);
+      if (
+        tileAt(s, dest) !== '#' &&
+        tileAt(s, dest) !== 'B' &&
+        !enemyAt(s, dest) &&
+        !livingAt(s, dest) &&
+        !decoyAt(s, dest)
+      ) {
         Object.assign(e, dest);
       }
     }
     s.enemies = s.enemies.filter((e) => e.hp > 0);
+    handleBreakableWall(s, p);
   } else if (id === 'chain_spark') {
     const path = straightPath(p, t);
     if (
@@ -531,23 +682,89 @@ function play(s: GameState, index: number, target?: Position) {
       path.length > card.range ||
       path
         .slice(0, -1)
-        .some((v) => tileAt(s, v) === '#' || enemyAt(s, v) || livingAt(s, v))
+        .some(
+          (v) =>
+            tileAt(s, v) === '#' ||
+            tileAt(s, v) === 'B' ||
+            enemyAt(s, v) ||
+            livingAt(s, v) ||
+            decoyAt(s, v),
+        )
     )
       throw new Error('Choose an enemy in clear range.');
-    enemy.hp -= 1;
+    damageEnemy(s, enemy, 1 + comboBonus);
     note(s, `${ENEMIES[enemy.kind].name} is struck by chain spark.`);
     for (const other of s.enemies) {
       if (other.id !== enemy.id && distance(enemy, other) === 1) {
-        other.hp -= 1;
+        damageEnemy(s, other, 1);
         note(s, `Spark chains to ${ENEMIES[other.kind].name}!`);
       }
     }
     s.enemies = s.enemies.filter((e) => e.hp > 0);
+    handleBreakableWall(s, t);
   } else if (id === 'snare') {
     if (!enemy || distance(p, t) > card.range)
       throw new Error('Choose an enemy within range.');
     applyStatus(enemy, { type: 'poison', rounds: 3 });
     note(s, `${ENEMIES[enemy.kind].name} is poisoned!`);
+  } else if (id === 'pierce') {
+    if (
+      same(p, t) ||
+      (p.x !== t.x && p.y !== t.y) ||
+      distance(p, t) > card.range
+    )
+      throw new Error('Choose a tile in a straight line up to 3 tiles.');
+    const d = { x: Math.sign(t.x - p.x), y: Math.sign(t.y - p.y) };
+    const beam: Position[] = [];
+    for (let n = 1; n <= card.range; n++) {
+      const pos = { x: p.x + d.x * n, y: p.y + d.y * n };
+      if (tileAt(s, pos) === '#') break;
+      beam.push(pos);
+    }
+    if (!beam.some((pos) => same(pos, t)))
+      throw new Error('Choose a clear straight line.');
+    const hitEnemies = s.enemies.filter((e) =>
+      beam.some((pos) => same(pos, e)),
+    );
+    if (!hitEnemies.length) throw new Error('No enemies in line of fire.');
+    const bonus = (activePlayer(s).relics ?? []).includes('sharp_edge') ? 1 : 0;
+    const totalDmg = 2 + bonus + comboBonus;
+    hitEnemies.forEach((e) => {
+      damageEnemy(s, e, totalDmg);
+    });
+    s.enemies = s.enemies.filter((e) => e.hp > 0);
+  } else if (id === 'time_rewind') {
+    if (!same(p, t)) throw new Error('Target yourself to rewind time.');
+    s.plays += 1;
+    if (p.statuses && p.statuses.length > 0) {
+      const negIdx = p.statuses.findIndex(
+        (st) => (st.type === 'poison' || st.type === 'stun') && st.rounds > 0,
+      );
+      if (negIdx >= 0) {
+        const removed = p.statuses.splice(negIdx, 1)[0];
+        note(s, `${p.name} cleansed ${removed.type}.`);
+      }
+    }
+  } else if (id === 'decoy') {
+    if (
+      same(p, t) ||
+      distance(p, t) > card.range ||
+      tileAt(s, t) === '#' ||
+      livingAt(s, t) ||
+      enemyAt(s, t) ||
+      decoyAt(s, t)
+    )
+      throw new Error('Choose an empty tile within 2 steps.');
+    s.decoys ??= [];
+    s.decoys.push({
+      id: `decoy-${s.round}-${s.decoys.length}`,
+      kind: 'decoy',
+      x: t.x,
+      y: t.y,
+      hp: 2,
+      maxHp: 2,
+    });
+    note(s, `${p.name} deployed a decoy.`);
   }
   p.hand.splice(index, 1);
   p.discard.push(id);
@@ -555,6 +772,14 @@ function play(s: GameState, index: number, target?: Position) {
   else s.plays -= card.cost ?? 1;
   if (card.cooldown) (p.cooldowns ??= {})[id] = s.round + card.cooldown;
   note(s, `${p.name} played ${card.name}.`);
+  if (isCombo) {
+    note(s, 'Combo strike! +1 bonus damage.');
+  }
+  if (card.category === 'attack') {
+    p.lastCardCategory = undefined;
+  } else {
+    p.lastCardCategory = card.category;
+  }
 }
 function enemyTurn(s: GameState) {
   for (const e of s.enemies) {
@@ -587,11 +812,76 @@ function enemyTurn(s: GameState) {
     for (const p of s.players.filter((v) => v.hp > 0))
       if (e.intent.attack.some((v) => same(v, p)))
         hit(s, p, ENEMIES[e.kind].damage);
+    for (const d of (s.decoys ?? []).filter((v) => v.hp > 0)) {
+      if (e.intent.attack.some((v) => same(v, d))) {
+        d.hp = Math.max(0, d.hp - ENEMIES[e.kind].damage);
+        note(s, `Decoy takes ${ENEMIES[e.kind].damage} damage.`);
+      }
+    }
+    s.decoys = (s.decoys ?? []).filter((d) => d.hp > 0);
+
+    if (e.kind === 'healer') {
+      const wounded = s.enemies
+        .filter(
+          (other) =>
+            other.hp > 0 &&
+            other.hp < ENEMIES[other.kind].hp &&
+            distance(e, other) <= 3,
+        )
+        .sort((a, b) =>
+          a.hp !== b.hp ? a.hp - b.hp : distance(e, a) - distance(e, b),
+        );
+      if (wounded.length) {
+        wounded[0].hp = Math.min(
+          ENEMIES[wounded[0].kind].hp,
+          wounded[0].hp + 1,
+        );
+        note(
+          s,
+          `${ENEMIES[e.kind].name} heals ${ENEMIES[wounded[0].kind].name} for 1 HP.`,
+        );
+      }
+    }
+    if (e.kind === 'shield_bearer') {
+      for (const ally of s.enemies) {
+        if (ally.id !== e.id && distance(e, ally) === 1) {
+          ally.shield = (ally.shield ?? 0) + 1;
+        }
+      }
+      note(s, `${ENEMIES[e.kind].name} shields adjacent allies.`);
+    }
+    if (e.kind === 'summoner' && e.intent.summon) {
+      const sp = e.intent.summon;
+      if (
+        !enemyAt(s, sp) &&
+        !livingAt(s, sp) &&
+        !decoyAt(s, sp) &&
+        tileAt(s, sp) !== '#'
+      ) {
+        s.enemies.push({
+          id: `minion-${s.round}-${s.enemies.length}`,
+          kind: 'chaser',
+          x: sp.x,
+          y: sp.y,
+          hp: 1,
+          heading: 0,
+          intent: { attack: [] },
+        });
+        note(s, `${ENEMIES[e.kind].name} summoned a Seeker minion!`);
+      }
+    }
   }
+  for (const d of s.decoys ?? []) {
+    if (tileAt(s, d) === '~') {
+      d.hp -= 1;
+      note(s, 'Decoy takes hazard damage.');
+    }
+  }
+  s.decoys = (s.decoys ?? []).filter((d) => d.hp > 0);
   for (const e of s.enemies) {
     if (e.intent.charging) continue;
     const next = e.intent.move;
-    if (next && !livingAt(s, next) && !enemyAt(s, next)) {
+    if (next && !livingAt(s, next) && !enemyAt(s, next) && !decoyAt(s, next)) {
       if (e.kind === 'patroller') e.heading = next.x > e.x ? 1 : 0;
       Object.assign(e, next);
     }
@@ -603,6 +893,7 @@ function enemyTurn(s: GameState) {
   for (const p of s.players.filter((p) => p.hp > 0)) tickStatuses(p);
 }
 function advance(s: GameState) {
+  activePlayer(s).lastCardCategory = undefined;
   let next = s.players.findIndex((p, i) => i > s.active && p.hp > 0);
   if (next < 0) {
     enemyTurn(s);
@@ -616,6 +907,7 @@ function advance(s: GameState) {
   s.active = next;
   s.turns++;
   const p = activePlayer(s);
+  p.lastCardCategory = undefined;
   s.plays = 2 + p.bonus;
   p.bonus = 0;
   if (hasStatus(p, 'poison')) {
@@ -878,7 +1170,11 @@ export function legalTargets(s: GameState, card: number): Position[] {
     for (let x = 0; x < level.width; x++) {
       const t = { x, y };
       // Skip walls early
-      if (tileAt(s, t) === '#') continue;
+      if (
+        tileAt(s, t) === '#' ||
+        (tileAt(s, t) === 'B' && c.category !== 'attack')
+      )
+        continue;
       // Skip tiles out of card range (Manhattan distance)
       if (c.range > 0 && distance(p, t) > c.range) continue;
       try {

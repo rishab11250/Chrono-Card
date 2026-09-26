@@ -48,8 +48,8 @@ function play(s: GameState, x?: number, y?: number) {
 
 describe('content and deterministic turns', () => {
   it('contains all cards, enemy kinds, and connected rooms with valid dimensions', () => {
-    expect(Object.keys(CARDS)).toHaveLength(19);
-    expect(Object.keys(ENEMIES)).toHaveLength(6);
+    expect(Object.keys(CARDS)).toHaveLength(25);
+    expect(Object.keys(ENEMIES)).toHaveLength(10);
     expect(LEVELS).toHaveLength(15);
     for (const level of LEVELS) {
       expect(level.width).toBeGreaterThanOrEqual(8);

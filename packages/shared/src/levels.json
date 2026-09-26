@@ -104,7 +104,14 @@
         "baseThreat": 3,
         "threatPerDepth": 1,
         "threatPerAlly": 1,
-        "pool": ["chaser", "patroller", "turret", "bomber"],
+        "pool": [
+          "chaser",
+          "patroller",
+          "turret",
+          "bomber",
+          "healer",
+          "shield_bearer"
+        ],
         "boss": "warden_elite"
       }
     },
@@ -212,7 +219,16 @@
         "baseThreat": 4,
         "threatPerDepth": 1,
         "threatPerAlly": 1,
-        "pool": ["chaser", "patroller", "turret", "bomber", "chaser_elite"],
+        "pool": [
+          "chaser",
+          "patroller",
+          "turret",
+          "bomber",
+          "chaser_elite",
+          "healer",
+          "shield_bearer",
+          "teleporter"
+        ],
         "boss": "warden_elite"
       }
     },
@@ -320,7 +336,17 @@
         "baseThreat": 5,
         "threatPerDepth": 1,
         "threatPerAlly": 1,
-        "pool": ["chaser", "patroller", "turret", "bomber", "chaser_elite"],
+        "pool": [
+          "chaser",
+          "patroller",
+          "turret",
+          "bomber",
+          "chaser_elite",
+          "healer",
+          "shield_bearer",
+          "teleporter",
+          "summoner"
+        ],
         "boss": "warden_elite"
       }
     }

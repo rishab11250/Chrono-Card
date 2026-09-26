@@ -11,7 +11,9 @@ export type CardId =
   | 'swap'
   | 'strike'
   | 'arrow'
+  | 'arrow_plus'
   | 'shield'
+  | 'shield_plus'
   | 'redraw'
   | 'boost'
   | 'taunt'
@@ -20,7 +22,11 @@ export type CardId =
   | 'quickshot'
   | 'mend'
   | 'forge'
-  | 'strike_plus';
+  | 'strike_plus'
+  | 'step3'
+  | 'pierce'
+  | 'time_rewind'
+  | 'decoy';
 export type Card = {
   id: CardId;
   name: string;
@@ -39,12 +45,19 @@ export type EnemyKind =
   | 'chaser'
   | 'warden_elite'
   | 'bomber'
-  | 'chaser_elite';
+  | 'chaser_elite'
+  | 'healer'
+  | 'shield_bearer'
+  | 'teleporter'
+  | 'summoner';
 export type EnemyIntent = {
   attack: Position[];
   move?: Position;
   hazard?: Position[];
   charging?: boolean;
+  heal?: Position;
+  shield?: Position[];
+  summon?: Position;
 };
 export type TemporaryHazard = Position & { expiresRound: number };
 export type Enemy = Position & {
@@ -54,6 +67,7 @@ export type Enemy = Position & {
   heading: number;
   intent: EnemyIntent;
   statuses?: StatusEffect[];
+  shield?: number;
 };
 export type Level = {
   actId: string;
@@ -101,6 +115,13 @@ export type Player = Position & {
   abandoned?: boolean;
   relics?: RelicId[];
   statuses?: StatusEffect[];
+  lastCardCategory?: 'move' | 'attack' | 'support';
+};
+export type Decoy = Position & {
+  id: string;
+  kind?: 'decoy';
+  hp: number;
+  maxHp: number;
 };
 export type TurnOrder = 'alternating' | 'simultaneous';
 export type Mode = 'solo' | 'duo' | 'party' | 'daily';
@@ -120,10 +141,12 @@ export type GameState = {
   visitedRooms: string[];
   roomChoices: string[];
   hazards: TemporaryHazard[];
+  decoys?: Decoy[];
   players: Player[];
   enemies: Enemy[];
   log: string[];
   revision: number;
+  tiles?: string[];
 };
 export type PlayAction = { type: 'play'; card: number; target?: Position };
 export type GameAction =
@@ -215,4 +238,29 @@ export type UserProfile = {
 export type AuthResponse = {
   token: string;
   user: UserProfile;
+};
+
+export type EventId = 'shrine_of_vitality' | 'time_forge' | 'curious_merchant';
+
+export type EventDefinition = {
+  id: EventId;
+  name: string;
+  description: string;
+  effect: 'heal_3' | 'upgrade_card' | 'trade_hp_for_relic' | string;
+};
+
+export type MutatorId = 'dense_fog' | 'unstable_ground' | 'temporal_surge';
+
+export type MutatorDefinition = {
+  id: MutatorId;
+  name: string;
+  description: string;
+};
+
+export type ScoreDetails = {
+  roomsCleared?: number;
+  turns?: number;
+  noDamageRooms?: number;
+  relicsCount?: number;
+  multiplier?: number;
 };

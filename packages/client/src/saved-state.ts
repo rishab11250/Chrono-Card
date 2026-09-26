@@ -28,6 +28,7 @@ export function validAction(v: unknown): v is GameAction {
           integer(v.target.y, 0, 30)))
     );
   if (v.type === 'choose-room') return LEVELS.some((l) => l.id === v.roomId);
+  if (v.type === 'pick-relic') return typeof v.relicId === 'string';
   return (
     v.type === 'draft-card' &&
     typeof v.cardId === 'string' &&
@@ -103,7 +104,14 @@ export function restoreLocalGame(value: unknown): GameState | null {
             e.intent.hazard.length <= 64 &&
             e.intent.hazard.every(pos))) &&
         (e.intent.charging === undefined ||
-          typeof e.intent.charging === 'boolean'),
+          typeof e.intent.charging === 'boolean') &&
+        (e.intent.heal === undefined || pos(e.intent.heal)) &&
+        (e.intent.shield === undefined ||
+          (Array.isArray(e.intent.shield) &&
+            e.intent.shield.length <= 64 &&
+            e.intent.shield.every(pos))) &&
+        (e.intent.summon === undefined || pos(e.intent.summon)) &&
+        (e.shield === undefined || integer(e.shield, 0, 100)),
     )
   )
     return null;

@@ -717,7 +717,9 @@ function setSelection(index: number | null) {
 }
 async function act(action: GameAction) {
   if (
-    !(action.type === 'choose-room' || action.type === 'draft-card'
+    !(action.type === 'choose-room' ||
+    action.type === 'draft-card' ||
+    action.type === 'pick-relic'
       ? canDecide()
       : canPlay())
   )
@@ -1103,7 +1105,10 @@ function render() {
       const status = useful
         ? `${previews[index].length} valid targets`
         : `No valid targets right now${cooldown ? ` • Recharging: ${cooldown} rounds` : ''}`;
-      return `<button class="card ${card.category} ${useful ? '' : 'not-useful'} ${selected === index ? 'selected' : ''}" data-card="${index}" aria-label="${escape(card.name)}" aria-describedby="card-description-${index} card-status-${index}" aria-pressed="${selected === index}" ${!playable ? 'disabled' : ''}><span class="card-top"><span>${card.category.toUpperCase()}</span><kbd>${index + 1}</kbd></span><span class="card-art" aria-hidden="true"><span class="art-orbit"></span><span>${icon(id)}</span><i>✦</i></span><strong>${card.name}</strong><span class="card-description"><span id="card-description-${index}">${card.description}</span><span class="card-status" id="card-status-${index}">${status}</span></span><span class="card-bottom">${id === 'redraw' || card.cost === 0 ? 'FREE PLAY' : '1 PLAY'}<span>${card.category === 'move' ? '↗' : card.category === 'attack' ? '✧' : '◇'}</span></span></button>`;
+      const count = p.hand.filter((x) => x === id).length;
+      const countBadge =
+        count > 1 ? `<span class="card-count-badge">×${count}</span>` : '';
+      return `<button class="card ${card.category} ${useful ? '' : 'not-useful'} ${selected === index ? 'selected' : ''}" data-card="${index}" aria-label="${escape(card.name)}" aria-describedby="card-description-${index} card-status-${index}" aria-pressed="${selected === index}" ${!playable ? 'disabled' : ''}><span class="card-top"><span>${card.category.toUpperCase()}</span>${countBadge}<kbd>${index + 1}</kbd></span><span class="card-art" aria-hidden="true"><span class="art-orbit"></span><span>${icon(id)}</span><i>✦</i></span><strong>${card.name}</strong><span class="card-description"><span id="card-description-${index}">${card.description}</span><span class="card-status" id="card-status-${index}">${status}</span></span><span class="card-bottom">${id === 'redraw' || card.cost === 0 ? 'FREE PLAY' : '1 PLAY'}<span>${card.category === 'move' ? '↗' : card.category === 'attack' ? '✧' : '◇'}</span></span></button>`;
     })
     .join('');
   document
