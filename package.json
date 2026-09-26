@@ -19,8 +19,7 @@
     "test:e2e": "playwright test",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "docs:pdf": "node scripts/pdf.mjs"
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@types/express": "^5.0.0",

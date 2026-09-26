@@ -73,12 +73,4 @@ For development, export the server variables before `npm run dev`. Vite reads cl
 - [ ] Complete a multiplayer escape through all three Acts (twelve rooms per route).
 - [ ] Submit simultaneous turns on both devices, refresh one after submission, and confirm the next round resolves once.
 - [ ] Register, sign in, restart the server, and confirm account access with the stable signing key.
-- [ ] Add the final client/server URLs to the submission HTML and regenerate the PDF.
-
-## Regenerate submission PDF
-
-```sh
-npm run docs:pdf
-```
-
-The script uses local Chromium by default. Use `CHROMIUM_PATH=/path/to/chromium`, or install Playwright's browser and set `PLAYWRIGHT_BUNDLED_CHROMIUM=1`. It writes `docs/chrono-card-submission.pdf`. Source: `docs/submission.html`; the print layout is exactly two A4 pages.
+- [ ] Add the final client/server URLs to the submission documentation.

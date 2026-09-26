@@ -32,7 +32,7 @@ The source requirements are the two documents supplied in the parent workspace: 
 | 25–30: lobbies, larger parties, reconnect, tuning     | Create/join/share, host control, couch and online duo, 2–4 players, session restore, expiry handling, validation tests, multi-browser playtests.             |
 | 31: final public hosting                              | Deferred by owner. Render/Vercel/Docker configuration and deployment checklist supplied.                                                                     |
 | 32: local full-build playtest                         | Automated legal full runs in solo, duo, and party; real four-player socket run with spectator; browser tests for solo/co-op/daily/reconnect/mobile/keyboard. |
-| 33: two-page PDF                                      | `docs/chrono-card-submission.pdf`, editable HTML source, reproducible print script, truthful prompt log.                                                     |
+| 33: submission document                               | `docs/submission.html`, editable HTML source, truthful prompt log.                                                                                           |
 | 34: fun feature                                       | Spectator links and server-scored daily challenge with SQLite leaderboard.                                                                                   |
 | 35: hosted smoke test                                 | Pending public deployment. Explicit checklist in `docs/deployment.md`.                                                                                       |
 

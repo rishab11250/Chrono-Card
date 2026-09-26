@@ -25,13 +25,9 @@ jobs:
       - run: npm run test:e2e
         env:
           PLAYWRIGHT_BUNDLED_CHROMIUM: '1'
-      - run: npm run docs:pdf
-        env:
-          PLAYWRIGHT_BUNDLED_CHROMIUM: '1'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: verification-artifacts
           path: |
-            docs/chrono-card-submission.pdf
             test-results/

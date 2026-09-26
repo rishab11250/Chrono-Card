@@ -44,7 +44,7 @@ Open **http://localhost:3001**. Production and Docker require a private `AUTH_SE
 | `packages/client` | Phaser 3 board, responsive DOM hand/HUD/dialogs, accessible tile controls, Socket.IO reconnect client       |
 | `packages/server` | Express HTTP, authoritative Socket.IO rooms, private reconnect tokens, Redis snapshots, SQLite daily scores |
 | `tests`           | Rules, legal playthrough bot, real socket integration, persistence, Chromium UI checks                      |
-| `docs`            | Rules decisions, timeline completion map, deployment guide, two-page submission PDF and source              |
+| `docs`            | Rules decisions, timeline completion map, deployment guide, and submission source                           |
 
 Online clients send intentions and state revisions. Only the server resolves online gameplay. Solo/co-op run the same shared engine locally. Enemy telegraphs stay fixed throughout a round, including after a swap; taunt is the explicit exception.
 
@@ -57,12 +57,9 @@ npm run format:check
 npm test
 npm run test:e2e
 npm run build
-npm run docs:pdf
 ```
 
 Browser tests use `/usr/bin/chromium` by default here. Elsewhere, run `npx playwright install chromium` and set `PLAYWRIGHT_BUNDLED_CHROMIUM=1`, or set `CHROMIUM_PATH` to an installed browser. Set `TEST_REDIS_URL` to a disposable local/test Redis instance to enable the restart-recovery test; CI supplies one. It uses unique room keys, never flushes the database, and expires its own data.
-
-`npm run docs:pdf` generates [the two-page submission](docs/chrono-card-submission.pdf) from [its HTML source](docs/submission.html). The prompt log records actual user instructions and labels the assistant's implementation decisions separately.
 
 ## Runtime configuration
 
@@ -84,7 +81,7 @@ The server does not implicitly load `.env` files. Export variables, configure yo
 
 See the [repository audit](docs/repo-audit.md) for security, persistence, simultaneous-play fixes, regression coverage, and remaining operational limits.
 
-The three-Act expansion adds graph-based routes, deterministic drafts, six new card IDs, six enemy kinds, and explicit threat budgets. See [mechanics and authoring notes](docs/progression.md). Upstream's authentication/profile, ghost replay, cosmetics, and tracked sprite rendering are retained. The original submission PDF describes the earlier milestone; this README and the mechanics notes describe the expanded game.
+The three-Act expansion adds graph-based routes, deterministic drafts, six new card IDs, six enemy kinds, and explicit threat budgets. See [mechanics and authoring notes](docs/progression.md). Upstream's authentication/profile, ghost replay, cosmetics, and tracked sprite rendering are retained. The original submission document describes the earlier milestone; this README and the mechanics notes describe the expanded game.
 
 The server is designed for **one long-lived instance**; Redis provides reconnect/restart snapshots, not distributed room ownership. Do not scale it horizontally without a shared lock/ownership design and a Socket.IO adapter. Daily scores identify a run/name. Hosting and the final public-link smoke test remain deferred at the owner's request.
 
