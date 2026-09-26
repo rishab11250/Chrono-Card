@@ -27,7 +27,7 @@ describe('simultaneous turn plans', () => {
         type: 'submit-turn',
         actions: [
           { type: 'play', card: 0, target: { x: p.x, y: p.y } },
-          { type: 'play', card: 0, target: { x: p.x, y: p.y } },
+          { type: 'play', card: 1, target: { x: p.x, y: p.y } },
         ],
       } as GameAction,
     }));
@@ -75,7 +75,7 @@ describe('simultaneous turn plans', () => {
             { type: 'play', card: 0, target: { x: 3, y: 1 } },
             {
               type: 'play',
-              card: 0,
+              card: 1,
               target: p.id === 'p0' ? { x: 3, y: 1 } : { x: 4, y: 1 },
             },
           ],

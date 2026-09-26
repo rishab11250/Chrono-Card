@@ -102,6 +102,10 @@ const livingAt = (s: GameState, p: Position) =>
   s.players.find((v) => v.hp > 0 && same(v, p));
 const enemyAt = (s: GameState, p: Position) =>
   s.enemies.find((v) => same(v, p));
+function nearestLiving(living: Player[], pos: Position): Player | undefined {
+  if (!living.length) return undefined;
+  return living.reduce((a, b) => (distance(pos, a) <= distance(pos, b) ? a : b));
+}
 export const activePlayer = (s: GameState) => s.players[s.active];
 function note(s: GameState, message: string) {
   s.log = [...s.log.slice(-7), message];
@@ -160,9 +164,7 @@ function planEnemies(s: GameState) {
     }
     e.intent = { attack: [] };
     if (e.kind === 'bomber') {
-      const nearest = [...living].sort(
-        (a, b) => distance(e, a) - distance(e, b),
-      )[0];
+      const nearest = nearestLiving(living, e);
       if (nearest && LEVELS[s.level].tiles[nearest.y][nearest.x] !== 'E')
         e.intent.hazard = [{ x: nearest.x, y: nearest.y }];
     } else if (e.kind === 'turret') {
@@ -192,9 +194,7 @@ function planEnemies(s: GameState) {
           }
       }
       // Move toward nearest player if within range 4
-      const nearest = [...living].sort(
-        (a, b) => distance(e, a) - distance(e, b),
-      )[0];
+      const nearest = nearestLiving(living, e);
       if (nearest && distance(e, nearest) <= 4) {
         const candidates = DIRECTIONS.map((d) => ({
           x: e.x + d.x,
@@ -217,9 +217,7 @@ function planEnemies(s: GameState) {
           { x: e.x - direction, y: e.y },
         ];
       } else {
-        const nearest = [...living].sort(
-          (a, b) => distance(e, a) - distance(e, b),
-        )[0];
+        const nearest = nearestLiving(living, e);
         candidates = nearest
           ? DIRECTIONS.map((d) => ({ x: e.x + d.x, y: e.y + d.y })).sort(
               (a, b) => distance(a, nearest) - distance(b, nearest),
@@ -436,7 +434,14 @@ function play(s: GameState, index: number, target?: Position) {
       Object.assign(ally, origin);
       hazard(s, ally);
     }
-    if (enemy) Object.assign(enemy, origin);
+    if (enemy) {
+      Object.assign(enemy, origin);
+      if (tileAt(s, origin) === '~') {
+        enemy.hp -= 1;
+        note(s, `${ENEMIES[enemy.kind].name} takes hazard damage.`);
+        s.enemies = s.enemies.filter((e) => e.hp > 0);
+      }
+    }
     hazard(s, p);
   } else if (
     id === 'strike' ||
@@ -633,9 +638,11 @@ export function previewSimultaneousTurn(
   s.plays = 2 + s.players[index].bonus;
   s.players[index].bonus = 0;
   s.rng = (state.rng ^ Math.imul(index + 1, 0x9e3779b9)) >>> 0;
-  for (const action of actions) {
+  const planned = actions.map(a => ({ cardId: s.players[index].hand[a.card], target: a.target }));
+  for (const action of planned) {
     if (activePlayer(s).hp <= 0) throw new Error('This explorer has fallen.');
-    play(s, action.card, action.target);
+    const idx = activePlayer(s).hand.indexOf(action.cardId);
+    if (idx >= 0) play(s, idx, action.target);
   }
   return s;
 }
@@ -665,18 +672,21 @@ export function resolveSimultaneousRound(
     s.active = index;
     s.plays = budgets[index];
     s.rng = (state.rng ^ Math.imul(index + 1, 0x9e3779b9)) >>> 0;
-    for (const action of plan.slice(0, 32)) {
+    const planned = plan.slice(0, 32).map(a => ({ cardId: activePlayer(s).hand[a.card], target: a.target }));
+    for (const action of planned) {
       if (activePlayer(s).hp <= 0) break;
+      const idx = activePlayer(s).hand.indexOf(action.cardId);
+      if (idx < 0) continue;
       try {
         const candidate = structuredClone(s);
-        play(candidate, action.card, action.target);
+        play(candidate, idx, action.target);
         s = candidate;
       } catch {
         // A collision spends/discards that card so later planned hand indices stay valid.
         const p = activePlayer(s),
-          id = p.hand[action.card];
+          id = p.hand[idx];
         if (id) {
-          p.hand.splice(action.card, 1);
+          p.hand.splice(idx, 1);
           p.discard.push(id);
           s.plays = Math.max(0, s.plays - (CARDS[id].cost ?? 1));
         }
@@ -727,14 +737,25 @@ export function abandonPlayer(state: GameState, playerId: string): GameState {
 export function legalTargets(s: GameState, card: number): Position[] {
   if (s.phase !== 'playing') return [];
   const level = LEVELS[s.level];
+  const p = activePlayer(s);
+  if (!Number.isInteger(card) || !p.hand[card]) return [];
+  const id = p.hand[card];
+  const c = CARDS[id];
+  if (s.plays < (c.cost ?? 1)) return [];
+  if ((p.cooldowns?.[id] ?? 0) > s.round) return [];
   const targets: Position[] = [];
   for (let y = 0; y < level.height; y++)
     for (let x = 0; x < level.width; x++) {
+      const t = { x, y };
+      // Skip walls early
+      if (tileAt(s, t) === '#') continue;
+      // Skip tiles out of card range (Manhattan distance)
+      if (c.range > 0 && distance(p, t) > c.range) continue;
       try {
-        play(structuredClone(s), card, { x, y });
-        targets.push({ x, y });
+        play(structuredClone(s), card, t);
+        targets.push(t);
       } catch {
-        /* Illegal previews are intentionally omitted. */
+        /* skip */
       }
     }
   return targets;

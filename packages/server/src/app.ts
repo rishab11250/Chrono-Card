@@ -712,6 +712,11 @@ export async function createApp(
           .json({ error: 'Daily wins must be verified by the game server.' });
         return;
       }
+      // Sanity check for non-session runs
+      if (!data.session && data.won && data.turns < 15) {
+        res.status(400).json({ error: 'Invalid run data.' });
+        return;
+      }
       const updated = storage.updateUserStats(user.id, stats, runId);
       const achievements = storage.getAchievements(user.username);
       res.json({
