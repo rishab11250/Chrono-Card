@@ -8,6 +8,30 @@ async function createRoom(page: Page, name: string) {
   await expect(page.locator('.room-code strong')).toBeVisible();
   return (await page.locator('.room-code strong').textContent())!;
 }
+test('canvas updates the player immediately and matches the restored board without needing refresh', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  const canvas = page.locator('#phaser-board canvas');
+  const capture = () =>
+    canvas.screenshot({
+      style: '#accessible-grid { visibility: hidden !important; }',
+    });
+  await expect(canvas).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  const before = await capture();
+  await page.locator('.card.move:not(.not-useful)').first().click();
+  await page.locator('.grid-cell.target').first().click();
+  await expect(page.locator('#plays-badge')).toHaveText('1 play left');
+  await expect.poll(async () => (await capture()).equals(before)).toBe(false);
+  const moved = await capture();
+  // Reconstructing the same saved state must not be needed to correct sprite positions.
+  await page.reload();
+  await expect(canvas).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  await expect.poll(async () => (await capture()).equals(moved)).toBe(true);
+});
 test('solo plays a movement card, ends turns, restores a run, and opens help', async ({
   page,
 }) => {
@@ -45,9 +69,9 @@ test('online host, guest, spectator, and refresh stay synchronized', async ({
   browser,
 }) => {
   const contexts = await Promise.all([
-    browser.newContext(),
-    browser.newContext(),
-    browser.newContext(),
+    browser.newContext({ reducedMotion: 'reduce' }),
+    browser.newContext({ reducedMotion: 'reduce' }),
+    browser.newContext({ reducedMotion: 'reduce' }),
   ]);
   try {
     const [host, guest, spectator] = await Promise.all(
@@ -73,6 +97,22 @@ test('online host, guest, spectator, and refresh stay synchronized', async ({
     await expect(
       spectator.getByRole('button', { name: 'End turn' }),
     ).toBeDisabled();
+    const remoteBoards = [guest, spectator].map((page) =>
+      page.locator('#phaser-board canvas'),
+    );
+    for (const page of [guest, spectator])
+      await page.evaluate(() => document.fonts.ready);
+    const beforeMove = await Promise.all(
+      remoteBoards.map((canvas) => canvas.screenshot()),
+    );
+    await host.locator('.card.move:not(.not-useful)').first().click();
+    await host.locator('.grid-cell.target').first().click();
+    await expect(host.locator('#plays-badge')).toHaveText('1 play left');
+    for (const [index, canvas] of remoteBoards.entries()) {
+      await expect
+        .poll(async () => (await canvas.screenshot()).equals(beforeMove[index]))
+        .toBe(false);
+    }
     await host.getByRole('button', { name: 'End turn' }).click();
     await expect(guest.getByRole('button', { name: 'End turn' })).toBeEnabled();
     await guest.reload();
