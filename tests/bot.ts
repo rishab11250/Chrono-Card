@@ -37,6 +37,7 @@ function pathDistance(s: GameState, from: Position, target: Position) {
 }
 function score(s: GameState) {
   if (s.phase === 'won') return 1_000_000;
+  if (s.phase === 'choosing' || s.phase === 'drafting') return 500_000;
   if (s.phase === 'lost') return -1_000_000;
   const p = activePlayer(s);
   let exitPos = { x: 8, y: 8 };
@@ -56,6 +57,7 @@ function score(s: GameState) {
   return (
     s.level * 10_000 -
     s.enemies.length * 300 +
+    -s.enemies.reduce((total, e) => total + e.hp * 35, 0) +
     s.players.reduce((sum, v) => sum + v.hp * 6 + v.shield * 1.5, 0) -
     dist * 5 -
     s.enemies.reduce(
@@ -74,7 +76,14 @@ function candidates(s: GameState): { state: GameState; action: GameAction }[] {
   const maxH = lvl ? lvl.height - 1 : 9;
   p.hand.forEach((id, card) => {
     let targets: Position[];
-    if (id === 'redraw' || id === 'shield') targets = [{ x: p.x, y: p.y }];
+    if (
+      id === 'redraw' ||
+      id === 'shield' ||
+      id === 'mend' ||
+      id === 'cleave' ||
+      id === 'forge'
+    )
+      targets = [{ x: p.x, y: p.y }];
     else if (CARDS[id].category === 'attack' || id === 'taunt')
       targets = s.enemies;
     else if (id === 'boost')
@@ -84,7 +93,7 @@ function candidates(s: GameState): { state: GameState; action: GameAction }[] {
       for (let y = 1; y < maxH; y++)
         for (let x = 1; x < maxW; x++)
           if (
-            (x === p.x || y === p.y) &&
+            (id === 'blink' || x === p.x || y === p.y) &&
             distance(p, { x, y }) <= CARDS[id].range
           )
             targets.push({ x, y });
@@ -107,6 +116,13 @@ function candidates(s: GameState): { state: GameState; action: GameAction }[] {
   return result;
 }
 export function chooseAction(s: GameState): GameAction {
+  if (s.phase === 'choosing')
+    return { type: 'choose-room', roomId: s.roomChoices[0] };
+  if (s.phase === 'drafting')
+    return {
+      type: 'draft-card',
+      cardId: s.draftChoices[activePlayer(s).id][0],
+    };
   const options = candidates(s);
   if (!options.length) return { type: 'end' };
   const base = score(s);

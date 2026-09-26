@@ -342,6 +342,113 @@ sprites.step2 = Array.from({ length: 24 }, (_, y) =>
   }).join(''),
 );
 sprites.duo = sprites.explorer;
+sprites.strike_plus = sprites.strike.map((row) =>
+  row.replaceAll('l', 'Y').replaceAll('s', 'y'),
+);
+sprites.quickshot = sprites.arrow.map((row) =>
+  row.replaceAll('B', 'y').replaceAll('b', 'H'),
+);
+sprites.blink = [
+  '................',
+  '......oooo......',
+  '....ooPPPPoo....',
+  '...oPPccccPPo...',
+  '..oPPcoooocPPo..',
+  '..oPco....ocPo..',
+  '.oPco......ocPo.',
+  '.oPco..YY..ocPo.',
+  '.oPco..YY..ocPo.',
+  '.oPco......ocPo.',
+  '..oPco....ocPo..',
+  '..oPPcoooocPPo..',
+  '...oPPccccPPo...',
+  '....ooPPPPoo....',
+  '......oooo......',
+  '................',
+];
+sprites.mend = [
+  '................',
+  '......oooo......',
+  '......oYYo......',
+  '.....oooooo.....',
+  '.....occcco.....',
+  '.....oBccBo.....',
+  '....oBBccBBo....',
+  '...oBGvvvvBBo...',
+  '..oBGvvwwvvBBo..',
+  '..oBGvwwwwvBBo..',
+  '..oBGvvwwvvBBo..',
+  '..oBGvvvvvvBBo..',
+  '...oBGGGGBBBo...',
+  '....oooooooo....',
+  '................',
+  '................',
+];
+sprites.forge = [
+  '................',
+  '........ooo.....',
+  '......ooYYyo....',
+  '....ooYYyyo.....',
+  '...oddddooo.....',
+  '..odlllllldo....',
+  '..odllllllldo...',
+  '...odddddddo....',
+  '.....oHHo.......',
+  '.....oHHo.......',
+  '.....oHHo.......',
+  '...oooooooooo...',
+  '..odsssssssdo...',
+  '...odddddddo....',
+  '....ooooooo.....',
+  '................',
+];
+sprites.cleave = [
+  '.......oo.......',
+  '......oYYo......',
+  '...oo.oYyo.oo...',
+  '..oPPooyyooPPo..',
+  '..oPcPPooPPcPo..',
+  '...oPcPooPcPo...',
+  '..ooPPoYYoPPoo..',
+  '.oYYYYYwwYYYYYo.',
+  '.oyyyyywwyyyyyo.',
+  '..ooPPoYYoPPoo..',
+  '...oPcPooPcPo...',
+  '..oPcPPooPPcPo..',
+  '..oPPooyyooPPo..',
+  '...oo.oYyo.oo...',
+  '......oyyo......',
+  '.......oo.......',
+];
+sprites.chaser_elite = sprites.chaser.map((row) =>
+  row.replaceAll('P', 'R').replaceAll('p', 'r'),
+);
+sprites.bomber = [
+  '........................',
+  '.........YYY............',
+  '..........y.............',
+  '..........h.............',
+  '........oooooo..........',
+  '......ooddddddoo........',
+  '.....odssssssssdo.......',
+  '....odsslsssssssdo......',
+  '....odssllssssssdo......',
+  '....odssoosssoosdo......',
+  '....odsYwossYwosdo......',
+  '....odssYYsssYYsdo......',
+  '....odssssssssssdo......',
+  '.....oddssssssddo.......',
+  '......oddddddddo........',
+  '.......oooooooo.........',
+  '......oHHooooHHo........',
+  '......oooo..oooo........',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+  '........................',
+];
 export function pixelSvg(name: string) {
   const rows = sprites[name] ?? sprites.explorer;
   return `<svg class="pixel-sprite" viewBox="0 0 ${Math.max(...rows.map((r) => r.length))} ${rows.length}" shape-rendering="crispEdges" aria-hidden="true">${rows.flatMap((row, y) => [...row].map((p, x) => (palette[p] ? `<rect x="${x}" y="${y}" width="1" height="1" fill="${palette[p]}"/>` : ''))).join('')}</svg>`;

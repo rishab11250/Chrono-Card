@@ -34,7 +34,7 @@ test('couch co-op alternates turns before enemies act', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /Couch co-op/ }).click();
   await expect(page.locator('.party-member')).toHaveCount(2);
-  await expect(page.locator('#turn-label')).toHaveText("EXPLORER 1'S TURN");
+  await expect(page.locator('#turn-label')).toHaveText('YOUR TURN');
   await page.getByRole('button', { name: 'End turn' }).click();
   await expect(page.locator('#turn-label')).toHaveText("EXPLORER 2'S TURN");
   await expect(page.locator('#round-label')).toHaveText('ROUND 01');

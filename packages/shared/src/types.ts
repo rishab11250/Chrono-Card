@@ -9,7 +9,13 @@ export type CardId =
   | 'shield'
   | 'redraw'
   | 'boost'
-  | 'taunt';
+  | 'taunt'
+  | 'blink'
+  | 'cleave'
+  | 'quickshot'
+  | 'mend'
+  | 'forge'
+  | 'strike_plus';
 export type Card = {
   id: CardId;
   name: string;
@@ -18,9 +24,24 @@ export type Card = {
   description: string;
   range: number;
   coop?: boolean;
+  draft?: boolean;
+  cost?: number;
+  cooldown?: number;
 };
-export type EnemyKind = 'turret' | 'patroller' | 'chaser' | 'warden_elite';
-export type EnemyIntent = { attack: Position[]; move?: Position };
+export type EnemyKind =
+  | 'turret'
+  | 'patroller'
+  | 'chaser'
+  | 'warden_elite'
+  | 'bomber'
+  | 'chaser_elite';
+export type EnemyIntent = {
+  attack: Position[];
+  move?: Position;
+  hazard?: Position[];
+  charging?: boolean;
+};
+export type TemporaryHazard = Position & { expiresRound: number };
 export type Enemy = Position & {
   id: string;
   kind: EnemyKind;
@@ -29,13 +50,28 @@ export type Enemy = Position & {
   intent: EnemyIntent;
 };
 export type Level = {
+  actId: string;
+  next: string[];
+  choiceDescription: string;
   id: string;
   name: string;
   subtitle: string;
   tiles: string[];
-  enemies: { kind: EnemyKind; x: number; y: number }[];
   width: number;
   height: number;
+};
+export type Act = {
+  id: string;
+  name: string;
+  entry: string;
+  difficulty: {
+    baseThreat: number;
+    threatPerDepth: number;
+    threatPerAlly: number;
+    pool: EnemyKind[];
+    boss: EnemyKind;
+  };
+  rooms: Omit<Level, 'width' | 'height' | 'actId'>[];
 };
 export type Player = Position & {
   id: string;
@@ -47,6 +83,7 @@ export type Player = Position & {
   deck: CardId[];
   discard: CardId[];
   bonus: number;
+  cooldowns?: Partial<Record<CardId, number>>;
   abandoned?: boolean;
 };
 export type TurnOrder = 'alternating' | 'simultaneous';
@@ -61,14 +98,21 @@ export type GameState = {
   turns: number;
   active: number;
   plays: number;
-  phase: 'playing' | 'won' | 'lost';
+  phase: 'playing' | 'choosing' | 'drafting' | 'won' | 'lost';
+  draftChoices: Record<string, CardId[]>;
+  visitedRooms: string[];
+  roomChoices: string[];
+  hazards: TemporaryHazard[];
   players: Player[];
   enemies: Enemy[];
   log: string[];
   revision: number;
 };
 export type GameAction =
-  { type: 'play'; card: number; target?: Position } | { type: 'end' };
+  | { type: 'play'; card: number; target?: Position }
+  | { type: 'end' }
+  | { type: 'choose-room'; roomId: string }
+  | { type: 'draft-card'; cardId: CardId };
 export type Member = {
   id: string;
   name: string;
@@ -151,4 +195,3 @@ export type AuthResponse = {
   token: string;
   user: UserProfile;
 };
-

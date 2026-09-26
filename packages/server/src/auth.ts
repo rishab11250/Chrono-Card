@@ -37,7 +37,9 @@ export function createToken(payload: { id: string; username: string }): string {
   const data = Buffer.from(
     JSON.stringify({ ...payload, exp: Date.now() + 30 * 86_400_000 }),
   ).toString('base64url');
-  const sig = createHmac('sha256', AUTH_SECRET).update(data).digest('base64url');
+  const sig = createHmac('sha256', AUTH_SECRET)
+    .update(data)
+    .digest('base64url');
   return `${data}.${sig}`;
 }
 
@@ -57,7 +59,8 @@ export function verifyToken(
     if (bufSig.length !== bufExpected.length) return null;
     if (!timingSafeEqual(bufSig, bufExpected)) return null;
     const payload = JSON.parse(Buffer.from(data, 'base64url').toString('utf8'));
-    if (typeof payload.exp === 'number' && Date.now() > payload.exp) return null;
+    if (typeof payload.exp === 'number' && Date.now() > payload.exp)
+      return null;
     if (!payload.id || !payload.username) return null;
     return { id: String(payload.id), username: String(payload.username) };
   } catch {

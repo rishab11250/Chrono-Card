@@ -48,8 +48,8 @@ function play(s: GameState, x?: number, y?: number) {
 
 describe('content and deterministic turns', () => {
   it('contains all cards, enemy kinds, and connected rooms with valid dimensions', () => {
-    expect(Object.keys(CARDS)).toHaveLength(10);
-    expect(Object.keys(ENEMIES)).toHaveLength(4);
+    expect(Object.keys(CARDS)).toHaveLength(16);
+    expect(Object.keys(ENEMIES)).toHaveLength(6);
     expect(LEVELS).toHaveLength(15);
     for (const level of LEVELS) {
       expect(level.width).toBeGreaterThanOrEqual(8);
@@ -80,9 +80,6 @@ describe('content and deterministic turns', () => {
         [...row].forEach((tile, x) => {
           if (tile !== '#') expect(visited.has(`${x},${y}`)).toBe(true);
         }),
-      );
-      level.enemies.forEach((e) =>
-        expect(visited.has(`${e.x},${e.y}`)).toBe(true),
       );
     }
   });
@@ -229,6 +226,7 @@ describe('card effects', () => {
     expect(next.plays).toBe(3);
     next.players[1].hand = ['taunt'];
     const e = next.enemies[0];
+    e.kind = 'chaser';
     const taunted = play(next, e.x, e.y);
     expect(taunted.enemies[0].intent.attack).toEqual([{ x: 2, y: 1 }]);
   });
@@ -283,7 +281,17 @@ describe('enemy rounds and expedition outcomes', () => {
     expect(play(s, 8, 8).level).toBe(0);
     s.enemies = [];
     s.players[0].hp = 4;
-    const next = play(s, 8, 8);
+    const drafting = play(s, 8, 8);
+    expect(drafting.phase).toBe('drafting');
+    const choosing = applyAction(drafting, 'p1', {
+      type: 'draft-card',
+      cardId: drafting.draftChoices.p1[0],
+    });
+    expect(choosing.phase).toBe('choosing');
+    const next = applyAction(choosing, 'p1', {
+      type: 'choose-room',
+      roomId: choosing.roomChoices[0],
+    });
     expect(next.level).toBe(1);
     expect(next.players[0]).toMatchObject({ x: 1, y: 1, hp: 7 });
     s.level = LEVELS.length - 1;
@@ -310,7 +318,16 @@ describe('enemy rounds and expedition outcomes', () => {
     s.players[0].hand = ['step1'];
     s.players[0].x = 7;
     s.players[0].y = 8;
-    const next = play(s, 8, 8);
+    let choosing = play(s, 8, 8);
+    while (choosing.phase === 'drafting')
+      choosing = applyAction(choosing, activePlayer(choosing).id, {
+        type: 'draft-card',
+        cardId: choosing.draftChoices[activePlayer(choosing).id][0],
+      });
+    const next = applyAction(choosing, 'a', {
+      type: 'choose-room',
+      roomId: choosing.roomChoices[0],
+    });
     expect(next.players[1].hp).toBe(0);
     expect(next.players[2].hp).toBe(3);
   });

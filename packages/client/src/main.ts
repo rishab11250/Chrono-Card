@@ -1,6 +1,9 @@
 import './style.css';
+import './progression.css';
+import './phone.css';
 import {
   activePlayer,
+  ACTS,
   applyAction,
   CARDS,
   createGame,
@@ -8,7 +11,9 @@ import {
   legalTargets,
   LEVELS,
   same,
+  tileAt,
   type GameAction,
+  type CardId,
   type GameState,
   type LeaderboardEntry,
   type Position,
@@ -163,6 +168,18 @@ let prevState: GameState | null = null;
 let room: RoomView | null = null;
 let selected: number | null = null;
 let targets: Position[] = [];
+let handTargetCache: { state: GameState; targets: Position[][] } | null = null;
+function handTargets(): Position[][] {
+  // UI-only previews. State is immutable between actions, so selection/focus renders can reuse them.
+  if (handTargetCache?.state !== game)
+    handTargetCache = {
+      state: game,
+      targets: activePlayer(game).hand.map((_, index) =>
+        legalTargets(game, index),
+      ),
+    };
+  return handTargetCache.targets;
+}
 let busy = false;
 let sound = false;
 let connection = 'Local expedition';
@@ -437,7 +454,7 @@ $('#app').innerHTML = `
         <section class="dungeon-panel" aria-label="Dungeon board"><div class="board-toolbar"><span><i class="live-dot"></i><strong id="turn-label">YOUR TURN</strong></span><span id="round-label">ROUND 01</span></div><div class="board-wrap"><div id="phaser-board"></div><div id="accessible-grid" class="accessible-grid" role="group" aria-label="Dungeon tiles. Select a card, then a tile. Arrow keys move focus; Enter selects."></div><div id="outcome" class="outcome" hidden></div></div><div class="board-legend"><span><i class="legend-player"></i> Explorer</span><span><i class="legend-danger"></i> Next attack</span><span><i class="legend-exit"></i> Exit</span><span class="legend-hint">PLAN. PLAY. REPEAT.</span></div></section>
         <aside class="run-panel"><section class="party-section"><div class="section-heading"><h2>YOUR PARTY</h2><span id="party-count">01</span></div><div id="party"></div></section><section class="enemy-section"><div class="section-heading"><h2>IN THE SHADOWS</h2><span id="enemy-count">02</span></div><div id="enemies"></div></section><section class="log-section"><div class="section-heading"><h2>FIELD NOTES</h2><span>↙</span></div><ol id="field-notes"></ol></section><div class="exit-note" id="exit-note"><span>▥</span><p>Clear the room.<br><strong>Find your way out.</strong></p></div><div class="emote-bar" id="emote-bar" hidden>${EMOTES.map((e) => `<button class="emote-btn" data-emote="${escape(e)}">${escape(e)}</button>`).join('')}</div></aside>
       </div>
-      <section class="hand-section" aria-label="Your cards"><div class="hand-heading"><div><h2 id="hand-title">Your next move<span id="plays-badge">2 plays left</span></h2><p id="selection-hint">Choose a card, then a highlighted tile.</p></div><button id="end-turn" class="button primary">End turn <span>↗</span></button></div><div id="hand" class="hand"></div></section>
+      <section class="hand-section" aria-label="Your cards"><div class="hand-heading"><div><h2 id="hand-title">Your next move<span id="plays-badge">2 plays left</span></h2><p id="selection-hint" role="status" aria-live="polite" aria-atomic="true">Choose a card, then a highlighted tile.</p></div><button id="end-turn" class="button primary">End turn <span>↗</span></button></div><button id="progression-resume" class="button primary" hidden>Continue expedition</button><div id="hand" class="hand"></div></section>
       <footer class="game-footer"><span>THE DUNGEON MOVES ONLY WHEN YOU DO.</span><span><kbd>1</kbd>–<kbd>5</kbd> select card <span class="footer-separator">/</span> <kbd>Esc</kbd> cancel <span class="footer-separator">/</span> <kbd>E</kbd> end turn</span></footer>
     </div>
   </main>
@@ -611,11 +628,16 @@ function saveLocal() {
 }
 function setSelection(index: number | null) {
   selected = index;
-  targets = index === null ? [] : legalTargets(game, index);
+  targets = index === null ? [] : (handTargets()[index] ?? []);
   render();
 }
 async function act(action: GameAction) {
-  if (!canPlay()) return;
+  if (
+    !(action.type === 'choose-room' || action.type === 'draft-card'
+      ? canDecide()
+      : canPlay())
+  )
+    return;
   const playedCardId =
     action.type === 'play' ? activePlayer(game).hand[action.card] : null;
   const soundCategory = playedCardId
@@ -654,7 +676,8 @@ let dragState = {
 };
 
 function startCardDrag(e: PointerEvent, index: number) {
-  if (!canPlay() || game.plays < 1) return;
+  // A phone swipe scrolls the inventory; only a completed tap selects a card.
+  if (e.pointerType === 'touch' || !canPlay()) return;
   selectCard(index);
   dragState = {
     active: true,
@@ -720,13 +743,13 @@ window.addEventListener('pointerup', (e) => {
 });
 
 function selectCard(index: number) {
-  if (!canPlay() || game.plays < 1) return;
+  if (!canPlay()) return;
   if (selected === index) {
     setSelection(null);
     return;
   }
   const id = activePlayer(game).hand[index];
-  if (id === 'redraw') {
+  if (id === 'redraw' && handTargets()[index]?.length) {
     void act({ type: 'play', card: index });
     return;
   }
@@ -736,17 +759,20 @@ function selectCard(index: number) {
     $('.board-wrap').getBoundingClientRect().top < 0
   )
     $('.board-wrap').scrollIntoView({ block: 'center', behavior: 'instant' });
-  if (!targets.length)
-    toast(
-      'No valid targets for this card. Choose another card or end your turn.',
-    );
 }
 function tileLabel(x: number, y: number) {
   const position = { x, y };
-  const tile = LEVELS[game.level].tiles[y][x];
+  const tile = tileAt(game, position);
   const player = game.players.find((p) => p.hp > 0 && same(p, position));
   const enemy = game.enemies.find((e) => same(e, position));
-  return `Column ${x + 1}, row ${y + 1}: ${player ? `${player.name}, ${player.hp} HP` : enemy ? `${ENEMIES[enemy.kind].name}, ${enemy.hp} HP` : tile === '#' ? 'wall' : tile === '~' ? 'hazard, 1 damage' : tile === 'E' ? `exit ${game.enemies.length ? 'locked' : 'open'}` : 'floor'}${game.enemies.some((e) => e.intent.attack.some((p) => same(p, position))) ? ', enemy will attack here' : ''}${targets.some((p) => same(p, position)) ? ', valid target' : ''}`;
+  const pendingHazard = game.enemies.some((e) =>
+    e.intent.hazard?.some((p) => same(p, position)),
+  );
+  const temporary = (game.hazards ?? []).find((h) => same(h, position));
+  const attacks = game.enemies.filter((e) =>
+    e.intent.attack.some((p) => same(p, position)),
+  );
+  return `Column ${x + 1}, row ${y + 1}: ${player ? `${player.name}, ${player.hp} HP` : enemy ? `${ENEMIES[enemy.kind].name}, ${enemy.hp} HP${enemy.intent.charging ? ', charging, attacks in two rounds' : ''}` : tile === '#' ? 'wall' : tile === '~' ? 'hazard, 1 damage on entry' : tile === 'E' ? `exit ${game.enemies.length ? 'locked' : 'open'}` : 'floor'}${temporary ? `, embers: ${temporary.expiresRound - game.round} rounds left, 1 damage on entry` : ''}${pendingHazard ? ', Bomber will drop embers here next round' : ''}${attacks.length ? (attacks.every((e) => e.intent.charging) ? ', charging attack here in two rounds' : ', enemy will attack here next round') : ''}${targets.some((p) => same(p, position)) ? ', valid target' : ''}`;
 }
 const grid = $('#accessible-grid');
 let currentGridLevel = -1;
@@ -800,8 +826,16 @@ grid.addEventListener('keydown', (event) => {
 function render() {
   updateAccessibleGrid(game.level);
   const p = activePlayer(game);
+  const previews = handTargets();
+  targets = selected === null ? [] : (previews[selected] ?? []);
+  const focusedCard =
+    document.activeElement instanceof HTMLElement
+      ? document.activeElement.closest<HTMLButtonElement>('[data-card]')
+          ?.dataset.card
+      : undefined;
   const level = LEVELS[game.level];
   const playable = canPlay();
+  $('.board-wrap').style.aspectRatio = `${level.width} / ${level.height}`;
   const modeText = room
     ? room.mode === 'daily'
       ? 'DAILY CHALLENGE'
@@ -823,30 +857,32 @@ function render() {
     `CHAPTER ${String(game.level + 1).padStart(2, '0')} / ${String(LEVELS.length).padStart(2, '0')}`;
   $('#room-name').textContent = level.name;
   $('#room-subtitle').textContent = level.subtitle;
-  const acts: { name: string; start: number; end: number }[] = [];
-  const actCount = Math.max(1, Math.ceil(LEVELS.length / 5));
-  for (let a = 0; a < actCount; a++) {
-    const start = a * 5;
-    const end = Math.min(LEVELS.length - 1, (a + 1) * 5 - 1);
-    if (start < LEVELS.length) {
-      const roman =
-        ['ACT I', 'ACT II', 'ACT III', 'ACT IV'][a] ?? `ACT ${a + 1}`;
-      acts.push({ name: roman, start, end });
-    }
-  }
+  const acts = ACTS.map((act) => ({
+    name: act.name.split(' — ')[0],
+    start: LEVELS.findIndex((level) => level.id === act.entry),
+    end: LEVELS.findIndex(
+      (level) => level.id === act.rooms[act.rooms.length - 1].id,
+    ),
+  }));
   $('#room-progress').innerHTML = acts
     .map((act) => {
       const steps = LEVELS.slice(act.start, act.end + 1)
         .map((l, idx) => {
           const i = act.start + idx;
-          const isBoss = (i + 1) % 5 === 0 && i < LEVELS.length - 1;
+          const isBoss = l.next.length === 0 && i < LEVELS.length - 1;
           const isFinalBoss = i === LEVELS.length - 1;
           const bossIcon = isFinalBoss ? '👑' : isBoss ? '⚔' : '';
           const label =
-            i < game.level ? '✓' : bossIcon || String(i + 1).padStart(2, '0');
+            game.visitedRooms?.includes(l.id) && i !== game.level
+              ? '✓'
+              : bossIcon || String(i + 1).padStart(2, '0');
           const classes = [
             'progress-step',
-            i < game.level ? 'complete' : i === game.level ? 'current' : '',
+            i === game.level
+              ? 'current'
+              : game.visitedRooms?.includes(l.id)
+                ? 'complete'
+                : '',
             bossIcon ? 'boss-step' : '',
             isFinalBoss ? 'final-boss-step' : '',
           ]
@@ -874,17 +910,21 @@ function render() {
   $('#turn-label').textContent =
     room && !room.game
       ? 'PARTY IS GATHERING'
-      : game.phase !== 'playing'
-        ? 'EXPEDITION COMPLETE'
-        : room?.paused
-          ? 'WAITING FOR RECONNECT'
-          : room && !net.session
-            ? 'SPECTATING'
-            : playable
-              ? game.players.length === 1
-                ? 'YOUR TURN'
-                : `${p.name.toUpperCase()}'S TURN`
-              : `${p.name.toUpperCase()}'S TURN`;
+      : game.phase === 'choosing'
+        ? 'CHOOSE YOUR PATH'
+        : game.phase === 'drafting'
+          ? 'CHOOSE A NEW CARD'
+          : game.phase !== 'playing'
+            ? 'EXPEDITION COMPLETE'
+            : room?.paused
+              ? 'WAITING FOR RECONNECT'
+              : room && !net.session
+                ? 'SPECTATING'
+                : playable
+                  ? game.players.length === 1 || (!room && p.name === 'You')
+                    ? 'YOUR TURN'
+                    : `${p.name.toUpperCase()}'S TURN`
+                  : `${p.name.toUpperCase()}'S TURN`;
   $('#round-label').textContent =
     `ROUND ${String(game.round).padStart(2, '0')}`;
   $('#party-count').textContent = `${game.players.length}`.padStart(2, '0');
@@ -924,7 +964,7 @@ function render() {
       : room?.paused
         ? `Holding your teammate’s slot for ${room.graceSeconds} seconds.`
         : selectedCard
-          ? `${selectedCard.name}: ${selectedCard.description}`
+          ? `${selectedCard.name}: ${targets.length ? selectedCard.description : 'No valid targets for this card right now. Keep it selected to inspect the board, choose another card, or use Second chance.'}`
           : !playable && room
             ? net.session
               ? 'Watch your teammate plan their move.'
@@ -936,7 +976,12 @@ function render() {
   $('#hand').innerHTML = p.hand
     .map((id, index) => {
       const card = CARDS[id];
-      return `<button class="card ${card.category} ${selected === index ? 'selected' : ''}" data-card="${index}" aria-pressed="${selected === index}" ${!playable || game.plays < 1 ? 'disabled' : ''}><span class="card-top"><span>${card.category.toUpperCase()}</span><kbd>${index + 1}</kbd></span><span class="card-art" aria-hidden="true"><span class="art-orbit"></span><span>${icon(id)}</span><i>✦</i></span><strong>${card.name}</strong><span class="card-description">${card.description}</span><span class="card-bottom">${id === 'redraw' ? 'FREE PLAY' : '1 PLAY'}<span>${card.category === 'move' ? '↗' : card.category === 'attack' ? '✧' : '◇'}</span></span></button>`;
+      const useful = previews[index].length > 0;
+      const cooldown = Math.max(0, (p.cooldowns?.[id] ?? 0) - game.round);
+      const status = useful
+        ? `${previews[index].length} valid targets`
+        : `No valid targets right now${cooldown ? ` • Recharging: ${cooldown} rounds` : ''}`;
+      return `<button class="card ${card.category} ${useful ? '' : 'not-useful'} ${selected === index ? 'selected' : ''}" data-card="${index}" aria-label="${escape(card.name)}" aria-describedby="card-description-${index} card-status-${index}" aria-pressed="${selected === index}" ${!playable ? 'disabled' : ''}><span class="card-top"><span>${card.category.toUpperCase()}</span><kbd>${index + 1}</kbd></span><span class="card-art" aria-hidden="true"><span class="art-orbit"></span><span>${icon(id)}</span><i>✦</i></span><strong>${card.name}</strong><span class="card-description"><span id="card-description-${index}">${card.description}</span><span class="card-status" id="card-status-${index}">${status}</span></span><span class="card-bottom">${id === 'redraw' || card.cost === 0 ? 'FREE PLAY' : '1 PLAY'}<span>${card.category === 'move' ? '↗' : card.category === 'attack' ? '✧' : '◇'}</span></span></button>`;
     })
     .join('');
   document
@@ -949,10 +994,23 @@ function render() {
         startCardDrag(e, Number(button.dataset.card)),
       );
     });
+  if (focusedCard !== undefined)
+    document
+      .querySelector<HTMLButtonElement>(`[data-card="${focusedCard}"]`)
+      ?.focus({ preventScroll: true });
+  grid.setAttribute('aria-describedby', 'selection-hint');
+  const noTargets = selected !== null && !targets.length;
+  grid.setAttribute(
+    'aria-label',
+    `Dungeon tiles. Arrow keys move focus; Enter selects.${noTargets ? ` No valid targets for ${selectedCard?.name ?? 'this card'} right now.` : ' Select a card, then a highlighted tile.'}`,
+  );
   for (const cell of grid.children as HTMLCollectionOf<HTMLButtonElement>) {
     const x = Number(cell.dataset.x);
     const y = Number(cell.dataset.y);
-    cell.setAttribute('aria-label', tileLabel(x, y));
+    cell.setAttribute(
+      'aria-label',
+      `${tileLabel(x, y)}${noTargets ? ', no valid targets for the selected card' : ''}`,
+    );
     cell.classList.toggle(
       'target',
       targets.some((t) => same(t, { x, y })),
@@ -969,12 +1027,12 @@ function render() {
   } else if (!inLobby) {
     void loadBoard().then((b) => b.update(game, targets));
   }
-  $('#outcome').hidden = game.phase === 'playing';
-  if (game.phase !== 'playing') {
+  $('#outcome').hidden = game.phase !== 'won' && game.phase !== 'lost';
+  if (game.phase === 'won' || game.phase === 'lost') {
     const canSaveGhost =
       !isGhostMode && game.mode === 'solo' && recordedActions.length > 0;
     $('#outcome').innerHTML =
-      `<div class="outcome-card"><span>${game.phase === 'won' ? '✧' : '⌛'}</span><div class="eyebrow">${game.phase === 'won' ? 'THE CYCLE IS BROKEN' : 'EVERY END IS A BEGINNING'}</div><h2>${game.phase === 'won' ? 'Time is yours.' : 'Out of time.'}</h2><p>${game.phase === 'won' ? `${LEVELS.length} rooms. ${game.turns} turns. One well-earned escape.` : `You reached room ${game.level + 1}. A new hand awaits.`}</p><button id="play-again" class="button primary">Another expedition ↗</button>${canSaveGhost ? `<div class="ghost-save-box"><p>Save this run as a Ghost ally?</p><div class="ghost-save-row"><input id="ghost-name-input" maxlength="20" placeholder="Ghost name" value="Past Explorer" /><button id="save-ghost-btn" class="button subtle small">Save Ghost 👻</button></div></div>` : ''}${room?.mode === 'daily' && game.phase === 'won' ? '<p>Your score is on today’s leaderboard.</p>' : ''}</div>`;
+      `<div class="outcome-card"><span>${game.phase === 'won' ? '✧' : '⌛'}</span><div class="eyebrow">${game.phase === 'won' ? 'THE CYCLE IS BROKEN' : 'EVERY END IS A BEGINNING'}</div><h2>${game.phase === 'won' ? 'Time is yours.' : 'Out of time.'}</h2><p>${game.phase === 'won' ? `${game.visitedRooms?.length ?? game.level + 1} rooms visited. ${game.turns} turns. One well-earned escape.` : `You reached room ${game.level + 1}. A new hand awaits.`}</p><button id="play-again" class="button primary">Another expedition ↗</button>${canSaveGhost ? `<div class="ghost-save-box"><p>Save this run as a Ghost ally?</p><div class="ghost-save-row"><input id="ghost-name-input" maxlength="20" placeholder="Ghost name" value="Past Explorer" /><button id="save-ghost-btn" class="button subtle small">Save Ghost 👻</button></div></div>` : ''}${room?.mode === 'daily' && game.phase === 'won' ? '<p>Your score is on today’s leaderboard.</p>' : ''}</div>`;
     $('#play-again').addEventListener('click', () => void newLocal('solo'));
     $('#save-ghost-btn')?.addEventListener('click', () => {
       const nameInput = $('#ghost-name-input') as HTMLInputElement;
@@ -997,7 +1055,9 @@ function render() {
 
   if (
     isGhostMode &&
-    game.phase === 'playing' &&
+    (game.phase === 'playing' ||
+      game.phase === 'choosing' ||
+      game.phase === 'drafting') &&
     activePlayer(game).id === 'ghost-1' &&
     !ghostPlaying
   ) {
@@ -1005,13 +1065,22 @@ function render() {
     window.setTimeout(() => {
       if (
         !isGhostMode ||
-        game.phase !== 'playing' ||
+        (game.phase !== 'playing' &&
+          game.phase !== 'choosing' &&
+          game.phase !== 'drafting') ||
         activePlayer(game).id !== 'ghost-1'
       ) {
         ghostPlaying = false;
         return;
       }
       let action = ghostReplayActions[ghostActionIndex++];
+      if (game.phase === 'choosing')
+        action = { type: 'choose-room', roomId: game.roomChoices[0] };
+      if (game.phase === 'drafting')
+        action = {
+          type: 'draft-card',
+          cardId: game.draftChoices['ghost-1'][0],
+        };
       if (!action) action = { type: 'end' };
       try {
         game = applyAction(game, 'ghost-1', action);
@@ -1029,12 +1098,14 @@ function render() {
     }, 350);
   }
 
+  renderProgression();
   if (game) {
     checkAchievements(game);
   }
   if (
     prevState &&
-    prevState.phase === 'playing' &&
+    prevState.phase !== 'won' &&
+    prevState.phase !== 'lost' &&
     (game.phase === 'won' || game.phase === 'lost')
   ) {
     void auth.recordRun({
@@ -1061,6 +1132,81 @@ function showProfileModal() {
     renderAuthModal('login');
   }
 }
+function canDecide() {
+  return (
+    !busy &&
+    (game.phase === 'choosing' || game.phase === 'drafting') &&
+    (!isGhostMode || activePlayer(game).id !== 'ghost-1') &&
+    (!room ||
+      (net.socket.connected &&
+        !room.paused &&
+        activePlayer(game).id === net.session?.playerId))
+  );
+}
+let progressionModal = '';
+function renderProgression() {
+  const resume = $<HTMLButtonElement>('#progression-resume');
+  resume.hidden = game.phase !== 'choosing' && game.phase !== 'drafting';
+  resume.textContent =
+    game.phase === 'drafting'
+      ? 'Choose your reward ↗'
+      : 'Choose your next path ↗';
+  resume.onclick = () => {
+    progressionModal = '';
+    renderProgression();
+  };
+  if (game.phase !== 'choosing' && game.phase !== 'drafting') {
+    if (progressionModal) {
+      modal.close();
+      progressionModal = '';
+    }
+    return;
+  }
+  const signature = `${game.seed}:${game.revision}:${canDecide()}:${connection}`;
+  if (progressionModal === signature && modal.open) return;
+  progressionModal = signature;
+  if (game.phase === 'drafting') {
+    showModal(
+      'A gift from the ruins',
+      `<p>${escape(activePlayer(game).name)}: choose one card to keep for this expedition. ${canDecide() ? '' : 'Waiting for their choice…'}</p><div class="progression-options draft-options">${(game.draftChoices[activePlayer(game).id] ?? []).map((id) => `<button class="progression-option" data-draft-card="${id}" ${canDecide() ? '' : 'disabled'}><span aria-hidden="true">${icon(id)}</span><strong>${escape(CARDS[id].name)}</strong><span>${escape(CARDS[id].description)}</span></button>`).join('')}</div>`,
+      'DRAFT • KEEP ONE',
+    );
+    modal.querySelectorAll<HTMLButtonElement>('[data-draft-card]').forEach(
+      (button) =>
+        (button.onclick = () =>
+          void act({
+            type: 'draft-card',
+            cardId: button.dataset.draftCard as CardId,
+          })),
+    );
+    modal
+      .querySelector<HTMLButtonElement>('.progression-option:not(:disabled)')
+      ?.focus();
+    return;
+  }
+  showModal(
+    'Which path next?',
+    `<p>${canDecide() ? 'Choose the party’s next room. Both paths meet again before the Act’s warden.' : `${escape(activePlayer(game).name)} is choosing the party’s path.`}</p><div class="progression-options">${game.roomChoices
+      .map((id) => {
+        const level = LEVELS.find((level) => level.id === id)!;
+        return `<button class="progression-option" data-room-choice="${id}" ${canDecide() ? '' : 'disabled'}><strong>${escape(level.name)}</strong><span>${escape(level.choiceDescription)}</span></button>`;
+      })
+      .join('')}</div>`,
+    'ROOM CLEARED',
+  );
+  modal.querySelectorAll<HTMLButtonElement>('[data-room-choice]').forEach(
+    (button) =>
+      (button.onclick = () =>
+        void act({
+          type: 'choose-room',
+          roomId: button.dataset.roomChoice!,
+        })),
+  );
+  modal
+    .querySelector<HTMLButtonElement>('.progression-option:not(:disabled)')
+    ?.focus();
+}
+
 function renderLoggedInProfile(user: UserProfile) {
   const s = user.stats;
   const winRate =
@@ -1439,7 +1585,7 @@ async function daily() {
 function help() {
   showModal(
     'Your hand is your way out.',
-    `<p>You don’t move with arrow keys. You move with cards.</p><ol class="instructions"><li><strong>Read the room.</strong> Red outlined tiles are exactly where enemies will strike. Small circles show their next move.</li><li><strong>Play your hand.</strong> Choose a card, then a highlighted tile. You get two plays per turn. Redraw is free.</li><li><strong>End your turn.</strong> In co-op, each living explorer acts before enemies attack and move. Unused cards are replaced next turn.</li><li><strong>Find the exit.</strong> Defeat every enemy, then reach the doorway. Clear all six rooms to escape.</li></ol><div class="help-note">Hazards deal 1 damage when entered. Phase dash skips hazards along the path, but not at its destination. A shield blocks one hit. New rooms restore 3 HP and revive fallen teammates; players who leave stay out.</div><p>Co-op uses separate HP. Swap with any living ally, lend them a play, or taunt an enemy and step out of its new target tile.</p><button id="help-done" class="button primary">Make my first move ↗</button>`,
+    `<p>You don’t move with arrow keys. You move with cards.</p><ol class="instructions"><li><strong>Read the room.</strong> Red outlined tiles strike next round. Purple warnings charge for two rounds. Gold bomb markers become temporary embers next round. Small circles show their next move.</li><li><strong>Play your hand.</strong> Choose a card, then a highlighted tile. You get two plays per turn. Redraw is free. Grey cards stay selectable but have no valid targets right now. Clockwork dart is free with a two-round recharge.</li><li><strong>End your turn.</strong> In co-op, each living explorer acts before enemies attack and move. Unused cards are replaced next turn.</li><li><strong>Find the exit.</strong> Defeat every enemy, then reach the doorway. Choose one new card after each room, then choose a path when the trail forks. Reach the final Act to escape.</li></ol><div class="help-note">Hazards deal 1 damage when entered. Phase dash skips hazards along the path, but not at its destination. A shield blocks one hit. New rooms restore 3 HP and revive fallen teammates; players who leave stay out.</div><p>Co-op uses separate HP. Swap with any living ally, lend them a play, or taunt an enemy and step out of its new target tile.</p><button id="help-done" class="button primary">Make my first move ↗</button>`,
   );
   $('#help-done').onclick = () => modal.close();
 }

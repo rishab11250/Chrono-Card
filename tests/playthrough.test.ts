@@ -13,7 +13,7 @@ it.each([
   { mode: 'duo', count: 2 },
   { mode: 'party', count: 4 },
 ] as { mode: Mode; count: number }[])(
-  'finishes all rooms in $mode with ordinary legal card plays',
+  `finishes an expedition through ${LEVELS.length} authored rooms in $mode with ordinary legal card plays`,
   ({ mode, count }) => {
     let state = createGame(
       mode,
@@ -24,7 +24,11 @@ it.each([
       20260924,
     );
     let actions = 0;
-    while (state.phase === 'playing' && actions < 4000) {
+    while (
+      state.phase !== 'won' &&
+      state.phase !== 'lost' &&
+      actions < LEVELS.length * 300
+    ) {
       state = applyAction(state, activePlayer(state).id, chooseAction(state));
       actions++;
     }

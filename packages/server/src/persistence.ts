@@ -198,16 +198,14 @@ export async function persistence(
       return null;
     },
     getUserById(id: string): StoredUser | null {
-      const row = db
-        .prepare('SELECT * FROM users WHERE id = ?')
-        .get(id) as StoredUser | undefined;
+      const row = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as
+        StoredUser | undefined;
       return row ?? null;
     },
     updateUserAvatar(id: string, avatar: string) {
       db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(avatar, id);
-      const user = db
-        .prepare('SELECT * FROM users WHERE id = ?')
-        .get(id) as StoredUser | undefined;
+      const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as
+        StoredUser | undefined;
       if (user && redis) {
         writes = writes.then(() =>
           redis.set(
@@ -221,9 +219,8 @@ export async function persistence(
       id: string,
       update: { won?: boolean; turns?: number; daily?: boolean },
     ): StoredUser | null {
-      const user = db
-        .prepare('SELECT * FROM users WHERE id = ?')
-        .get(id) as StoredUser | undefined;
+      const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as
+        StoredUser | undefined;
       if (!user) return null;
       const runs_played = user.runs_played + 1;
       const runs_won = update.won ? user.runs_won + 1 : user.runs_won;

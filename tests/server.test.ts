@@ -273,7 +273,7 @@ describe('authoritative rooms', () => {
     let actions = 0;
     while (actions < 4000) {
       const state = app.rooms.get(session.code)!.game!;
-      if (state.phase !== 'playing') break;
+      if (state.phase === 'won' || state.phase === 'lost') break;
       const socket = players.get(activePlayer(state).id)!;
       const result = await socket.emitWithAck('game:action', {
         revision: state.revision,
@@ -299,7 +299,7 @@ describe('authoritative rooms', () => {
     let actions = 0;
     while (actions < 4000) {
       const state = app.rooms.get(session.code)!.game!;
-      if (state.phase !== 'playing') break;
+      if (state.phase === 'won' || state.phase === 'lost') break;
       const result = await host.emitWithAck('game:action', {
         revision: state.revision,
         action: chooseAction(state),

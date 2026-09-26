@@ -1,5 +1,60 @@
 [
   {
+    "id": "blink",
+    "name": "Rift hop",
+    "category": "move",
+    "icon": "✦",
+    "description": "Teleport to an empty tile within 2 steps, across walls. Landing hazards hurt.",
+    "range": 2,
+    "draft": true
+  },
+  {
+    "id": "cleave",
+    "name": "Petal storm",
+    "category": "attack",
+    "icon": "✺",
+    "description": "Target yourself: deal 2 damage to every adjacent enemy.",
+    "range": 1,
+    "draft": true
+  },
+  {
+    "id": "quickshot",
+    "name": "Clockwork dart",
+    "category": "attack",
+    "icon": "➶",
+    "description": "Deal 1 damage in a clear straight line within 3 tiles. Free; all copies recharge for 2 rounds.",
+    "range": 3,
+    "cost": 0,
+    "cooldown": 2,
+    "draft": true
+  },
+  {
+    "id": "mend",
+    "name": "Dew of dawn",
+    "category": "support",
+    "icon": "✚",
+    "description": "Restore 3 HP to yourself or a living ally.",
+    "range": 20,
+    "draft": true
+  },
+  {
+    "id": "forge",
+    "name": "Ember forge",
+    "category": "support",
+    "icon": "⚒",
+    "description": "Target yourself: permanently upgrade one Iron edge in your hand, draw pile, or discard to Iron edge+.",
+    "range": 0,
+    "draft": true
+  },
+  {
+    "id": "strike_plus",
+    "name": "Iron edge+",
+    "category": "attack",
+    "icon": "⚔",
+    "description": "Deal 3 damage to an adjacent enemy. Forged for this expedition.",
+    "range": 1
+  },
+  {
     "id": "step1",
     "name": "Step I",
     "category": "move",
