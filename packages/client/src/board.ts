@@ -82,6 +82,30 @@ class Dungeon extends Phaser.Scene {
   targets: Position[] = [];
   ready = false;
   renderedLevel = -1;
+  renderedTilesKey = '';
+
+  spawnCombatText(x: number, y: number, text: string, color = '#ffeb3b') {
+    if (!this.ready || this.reduced()) return;
+    const txt = this.add
+      .text(x, y, text, {
+        fontFamily: 'monospace',
+        fontSize: '10px',
+        fontStyle: 'bold',
+        color,
+        stroke: '#000000',
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5)
+      .setDepth(20);
+    this.tweens.add({
+      targets: txt,
+      y: y - 18,
+      alpha: 0,
+      duration: 800,
+      ease: 'Cubic.easeOut',
+      onComplete: () => txt.destroy(),
+    });
+  }
 
   staticGraphics!: Phaser.GameObjects.Graphics;
   exitLockGraphics!: Phaser.GameObjects.Graphics;
@@ -274,6 +298,58 @@ class Dungeon extends Phaser.Scene {
           }
         }
 
+        // Combat popups: Player damage and shields
+        for (const p of state.players) {
+          const prevP = prev.players.find((x) => x.id === p.id);
+          if (prevP && p.hp < prevP.hp) {
+            this.spawnCombatText(
+              p.x * T + 16,
+              p.y * T + 2,
+              `-${prevP.hp - p.hp}`,
+              '#ff5e5e',
+            );
+          } else if (prevP && p.shield < prevP.shield) {
+            this.spawnCombatText(
+              p.x * T + 16,
+              p.y * T + 2,
+              'BLOCKED!',
+              '#72b6bc',
+            );
+          }
+        }
+        // Combat popups: Enemy damage and defeat
+        for (const e of state.enemies) {
+          const prevE = prev.enemies.find((x) => x.id === e.id);
+          if (prevE && e.hp < prevE.hp) {
+            this.spawnCombatText(
+              e.x * T + 16,
+              e.y * T + 2,
+              `-${prevE.hp - e.hp}`,
+              '#efc565',
+            );
+          }
+        }
+        for (const prevE of prev.enemies) {
+          if (!state.enemies.some((x) => x.id === prevE.id)) {
+            this.spawnCombatText(
+              prevE.x * T + 16,
+              prevE.y * T + 2,
+              'KO!',
+              '#ff7373',
+            );
+          }
+        }
+        const latest = state.log[state.log.length - 1] ?? '';
+        if (latest.includes('Combo strike!')) {
+          const ap = activePlayer(state);
+          this.spawnCombatText(
+            ap.x * T + 16,
+            ap.y * T - 10,
+            'COMBO +1',
+            '#ffd700',
+          );
+        }
+
         // Damage indicators
         for (const p of state.players) {
           const old = prev.players.find((player) => player.id === p.id);
@@ -328,14 +404,20 @@ class Dungeon extends Phaser.Scene {
   paint() {
     if (!this.state) return;
     const s = this.state;
-    if (this.renderedLevel !== s.level) {
-      for (const p of this.players.values()) p.container.destroy();
-      this.players.clear();
-      for (const e of this.enemies.values()) e.container.destroy();
-      this.enemies.clear();
+    const tilesKey = s.tiles
+      ? s.tiles.join('')
+      : (LEVELS[s.level]?.tiles?.join('') ?? '');
+    if (this.renderedLevel !== s.level || this.renderedTilesKey !== tilesKey) {
+      if (this.renderedLevel !== s.level) {
+        for (const p of this.players.values()) p.container.destroy();
+        this.players.clear();
+        for (const e of this.enemies.values()) e.container.destroy();
+        this.enemies.clear();
+      }
 
       this.renderRoom(s.level);
       this.renderedLevel = s.level;
+      this.renderedTilesKey = tilesKey;
     }
     this.renderEntities(s, this.targets);
   }
@@ -346,7 +428,7 @@ class Dungeon extends Phaser.Scene {
     const actThemes = [themes[0], themes[2], themes[4]];
     const theme =
         actThemes[actIndex] ?? themes[level % themes.length] ?? themes[0],
-      tiles = LEVELS[level].tiles;
+      tiles = this.state?.tiles ?? LEVELS[level].tiles;
     const rect = (
       x: number,
       y: number,
@@ -389,6 +471,19 @@ class Dungeon extends Phaser.Scene {
             rect(px + 18, py + 7, 4, 2, 0x5c996c);
             rect(px + 21, py + 12, 4, 2, 0x77aa71);
           }
+        } else if (tile === 'B') {
+          rect(px, py, 32, 32, 0x2e2b38);
+          rect(px + 1, py + 1, 30, 25, 0x635a6b);
+          rect(px + 1, py + 1, 30, 3, 0x93889c);
+          rect(px + 1, py + 4, 2, 20, 0x93889c);
+          rect(px + 7, py + 5, 2, 8, 0xefc565);
+          rect(px + 9, py + 12, 6, 2, 0xefc565);
+          rect(px + 14, py + 14, 2, 9, 0xfff3a6);
+          rect(px + 16, py + 21, 8, 2, 0xefc565);
+          rect(px + 23, py + 7, 3, 4, 0x3d3845);
+          rect(px + 5, py + 18, 4, 3, 0x3d3845);
+          rect(px + 2, py + 25, 29, 3, 0x483e4f);
+          rect(px + 3, py + 28, 26, 2, 0x352b3c);
         } else {
           rect(px, py, 32, 32, theme.shade);
           rect(px + 1, py + 1, 30, 30, theme.floor);

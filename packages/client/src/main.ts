@@ -23,6 +23,7 @@ import {
   type UserProfile,
   RELICS,
   type RelicId,
+  calculateScore,
 } from '@chrono/shared';
 import { API_URL, Network } from './net';
 import { icon } from './icons';
@@ -951,7 +952,28 @@ function render() {
   $('#chapter-label').textContent =
     `CHAPTER ${String(game.level + 1).padStart(2, '0')} / ${String(LEVELS.length).padStart(2, '0')}`;
   $('#room-name').textContent = level.name;
-  $('#room-subtitle').textContent = level.subtitle;
+  const actIndex = ACTS.findIndex((act) => act.id === level.actId);
+  const actMutatorLabels: Record<
+    number,
+    { name: string; icon: string; desc: string }
+  > = {
+    1: {
+      name: 'Dense Fog',
+      icon: '🌫',
+      desc: 'All projectile ranges reduced by 1',
+    },
+    2: {
+      name: 'Temporal Surge',
+      icon: '⚡',
+      desc: '+1 action play on turn 1 of each room',
+    },
+  };
+  const activeMutator = actMutatorLabels[actIndex];
+  $('#room-subtitle').innerHTML = `${escape(level.subtitle)}${
+    activeMutator
+      ? ` <span class="act-mutator-tag" title="${activeMutator.desc}">${activeMutator.icon} ${activeMutator.name}</span>`
+      : ''
+  }`;
   const acts = ACTS.map((act) => ({
     name: act.name.split(' — ')[0],
     start: LEVELS.findIndex((level) => level.id === act.entry),
@@ -1114,12 +1136,20 @@ function render() {
   document
     .querySelectorAll<HTMLButtonElement>('[data-card]')
     .forEach((button) => {
-      button.addEventListener('click', () =>
-        selectCard(Number(button.dataset.card)),
-      );
-      button.addEventListener('pointerdown', (e) =>
-        startCardDrag(e, Number(button.dataset.card)),
-      );
+      const idx = Number(button.dataset.card);
+      button.addEventListener('click', () => selectCard(idx));
+      button.addEventListener('pointerdown', (e) => startCardDrag(e, idx));
+      button.addEventListener('mouseenter', () => {
+        if (selected === null && canPlay()) {
+          const cardTargets = previews[idx] ?? [];
+          if (boardInstance) boardInstance.update(game, cardTargets);
+        }
+      });
+      button.addEventListener('mouseleave', () => {
+        if (selected === null && canPlay()) {
+          if (boardInstance) boardInstance.update(game, []);
+        }
+      });
     });
   if (focusedCard !== undefined)
     document
@@ -1158,8 +1188,17 @@ function render() {
   if (game.phase === 'won' || game.phase === 'lost') {
     const canSaveGhost =
       !isGhostMode && game.mode === 'solo' && recordedActions.length > 0;
+    const finalScore = calculateScore(game);
+    const scoreTier =
+      finalScore >= 12000
+        ? 'RANK S'
+        : finalScore >= 8000
+          ? 'RANK A'
+          : finalScore >= 4000
+            ? 'RANK B'
+            : 'RANK C';
     $('#outcome').innerHTML =
-      `<div class="outcome-card"><span>${game.phase === 'won' ? '✧' : '⌛'}</span><div class="eyebrow">${game.phase === 'won' ? 'THE CYCLE IS BROKEN' : 'EVERY END IS A BEGINNING'}</div><h2>${game.phase === 'won' ? 'Time is yours.' : 'Out of time.'}</h2><p>${game.phase === 'won' ? `${game.visitedRooms?.length ?? game.level + 1} rooms visited. ${game.turns} turns. One well-earned escape.` : `You reached room ${game.level + 1}. A new hand awaits.`}</p><button id="play-again" class="button primary">Another expedition ↗</button>${canSaveGhost ? `<div class="ghost-save-box"><p>Save this run as a Ghost ally?</p><div class="ghost-save-row"><input id="ghost-name-input" maxlength="20" placeholder="Ghost name" value="Past Explorer" /><button id="save-ghost-btn" class="button subtle small">Save Ghost 👻</button></div></div>` : ''}${room?.mode === 'daily' && game.phase === 'won' ? '<p>Your score is on today’s leaderboard.</p>' : ''}</div>`;
+      `<div class="outcome-card"><span>${game.phase === 'won' ? '✧' : '⌛'}</span><div class="eyebrow">${game.phase === 'won' ? 'THE CYCLE IS BROKEN' : 'EVERY END IS A BEGINNING'}</div><h2>${game.phase === 'won' ? 'Time is yours.' : 'Out of time.'}</h2><div class="score-banner"><span class="score-tier">${scoreTier}</span><span class="score-value">🏆 ${finalScore.toLocaleString()} PTS</span></div><p>${game.phase === 'won' ? `${game.visitedRooms?.length ?? game.level + 1} rooms visited. ${game.turns} turns. One well-earned escape.` : `You reached room ${game.level + 1}. A new hand awaits.`}</p><button id="play-again" class="button primary">Another expedition ↗</button>${canSaveGhost ? `<div class="ghost-save-box"><p>Save this run as a Ghost ally?</p><div class="ghost-save-row"><input id="ghost-name-input" maxlength="20" placeholder="Ghost name" value="Past Explorer" /><button id="save-ghost-btn" class="button subtle small">Save Ghost 👻</button></div></div>` : ''}${room?.mode === 'daily' && game.phase === 'won' ? '<p>Your score is on today’s leaderboard.</p>' : ''}</div>`;
     $('#play-again').addEventListener('click', () => void newLocal('solo'));
     $('#save-ghost-btn')?.addEventListener('click', () => {
       const nameInput = $('#ghost-name-input') as HTMLInputElement;
