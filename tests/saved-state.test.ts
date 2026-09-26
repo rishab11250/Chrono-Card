@@ -57,14 +57,7 @@ describe('browser save recovery', () => {
   it('accepts valid states beyond the launch caps', () => {
     const s = createGame('solo', [{ id: 'a', name: 'A' }]);
     s.enemies = [];
-    s.players[0].hand = [
-      'step1',
-      'strike',
-      'shield',
-      'mend',
-      'blink',
-      'snare',
-    ];
+    s.players[0].hand = ['step1', 'strike', 'shield', 'mend', 'blink', 'snare'];
     s.players[0].shield = 2;
     s.plays = 5;
     expect(restoreLocalGame(s)).not.toBeNull();

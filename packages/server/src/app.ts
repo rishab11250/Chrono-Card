@@ -394,7 +394,7 @@ export async function createApp(
     scheduleNextTick();
   }
 
-function resolvePlans(room: Room) {
+  function resolvePlans(room: Room) {
     if (
       room.turnOrder !== 'simultaneous' ||
       room.game?.phase !== 'playing' ||
@@ -1226,7 +1226,8 @@ function resolvePlans(room: Room) {
     }
     const wait = Math.max(250, nextDeadline - Date.now());
     houseTimer = setTimeout(tickHousekeeping, wait);
-    if (houseTimer && typeof houseTimer.unref === 'function') houseTimer.unref();
+    if (houseTimer && typeof houseTimer.unref === 'function')
+      houseTimer.unref();
   }
   scheduleNextTick();
   return {

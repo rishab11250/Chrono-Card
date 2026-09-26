@@ -498,4 +498,3 @@ describe('planSummoner', () => {
     expect(minion?.y).toBe(5);
   });
 });
-

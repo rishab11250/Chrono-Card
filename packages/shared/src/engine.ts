@@ -503,13 +503,7 @@ function play(s: GameState, index: number, target?: Position) {
   const enemy = enemyAt(s, t);
   const ally = livingAt(s, t);
   if (id === 'blink') {
-    if (
-      same(p, t) ||
-      distance(p, t) > range ||
-      enemy ||
-      ally ||
-      decoyAt(s, t)
-    )
+    if (same(p, t) || distance(p, t) > range || enemy || ally || decoyAt(s, t))
       throw new Error('Choose an empty tile within 2 steps.');
     Object.assign(p, t);
     hazard(s, p);
@@ -731,11 +725,7 @@ function play(s: GameState, index: number, target?: Position) {
     applyStatus(enemy, { type: 'poison', rounds: 3 });
     note(s, `${ENEMIES[enemy.kind].name} is poisoned!`);
   } else if (id === 'pierce') {
-    if (
-      same(p, t) ||
-      (p.x !== t.x && p.y !== t.y) ||
-      distance(p, t) > range
-    )
+    if (same(p, t) || (p.x !== t.x && p.y !== t.y) || distance(p, t) > range)
       throw new Error('Choose a tile in a straight line up to 3 tiles.');
     const d = { x: Math.sign(t.x - p.x), y: Math.sign(t.y - p.y) };
     const beam: Position[] = [];

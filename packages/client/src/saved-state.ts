@@ -82,8 +82,7 @@ export function restoreLocalGame(value: unknown): GameState | null {
         (p.relics === undefined ||
           (Array.isArray(p.relics) &&
             p.relics.every(
-              (id) =>
-                typeof id === 'string' && RELICS.some((r) => r.id === id),
+              (id) => typeof id === 'string' && RELICS.some((r) => r.id === id),
             ))) &&
         (p.statuses === undefined ||
           (Array.isArray(p.statuses) &&

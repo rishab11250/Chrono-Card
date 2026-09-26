@@ -365,4 +365,3 @@ export function planSummoner(
   };
   return summonerEnemy.intent;
 }
-

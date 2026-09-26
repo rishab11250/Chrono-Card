@@ -63,7 +63,9 @@ describe('Act mutators', () => {
   });
 
   it('temporal surge grants a third play only on Act III’s opening round', () => {
-    const surge = enter(LEVELS.findIndex((level) => level.actId === 'fracture'));
+    const surge = enter(
+      LEVELS.findIndex((level) => level.actId === 'fracture'),
+    );
     expect(surge.mutators).toContain('temporal_surge');
     expect(surge.plays).toBe(3);
     expect(enter(0).plays).toBe(2);
