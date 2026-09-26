@@ -491,6 +491,33 @@ describe('authoritative rooms', () => {
     expect(pubData.user.username).toBe('TestExplorer');
     expect(pubData.user.stats.runsWon).toBe(1);
   });
+  it('redacts sensitive fields for non-self user lookups', async () => {
+    const reg = await fetch(`${url}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: 'PublicExplorer',
+        password: 'public-password',
+      }),
+    });
+    expect(reg.status).toBe(201);
+    const regData = (await reg.json()) as AuthResponse & { ok: boolean };
+    const ownToken = regData.token;
+    const authedSelf = await fetch(`${url}/api/users/PublicExplorer`, {
+      headers: { Authorization: `Bearer ${ownToken}` },
+    });
+    expect(authedSelf.status).toBe(200);
+    const selfData = await authedSelf.json();
+    expect(selfData.user.dailyWins).toBe(0);
+    expect(selfData.user.bestTurns).toBe(999999);
+
+    const publicLookup = await fetch(`${url}/api/users/PublicExplorer`);
+    const publicData = await publicLookup.json();
+    expect(publicData.user.dailyWins).toBeUndefined();
+    expect(publicData.user.bestTurns).toBeUndefined();
+    expect(publicData.user.stats.runsPlayed).toBe(0);
+    expect(publicData.user.stats.runsWon).toBe(0);
+  });
 });
 describe('HTTP audit regressions', () => {
   it('validates JSON errors, protects mutations by origin, and supports cross-origin ghost preflight', async () => {

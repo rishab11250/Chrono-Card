@@ -26,7 +26,9 @@ export type CardId =
   | 'step3'
   | 'pierce'
   | 'time_rewind'
-  | 'decoy';
+  | 'decoy'
+  | 'toxic_blade'
+  | 'hunters_mark';
 export type Card = {
   id: CardId;
   name: string;
@@ -91,6 +93,7 @@ export type Act = {
     pool: EnemyKind[];
     boss: EnemyKind;
   };
+  mutator?: MutatorId[];
   rooms: Omit<Level, 'width' | 'height' | 'actId'>[];
 };
 export type RelicId =
@@ -111,6 +114,7 @@ export type Player = Position & {
   deck: CardId[];
   discard: CardId[];
   bonus: number;
+  bonusDamage?: number;
   cooldowns?: Partial<Record<CardId, number>>;
   abandoned?: boolean;
   relics?: RelicId[];
@@ -147,6 +151,7 @@ export type GameState = {
   log: string[];
   revision: number;
   tiles?: string[];
+  mutators?: MutatorId[];
 };
 export type PlayAction = { type: 'play'; card: number; target?: Position };
 export type GameAction =

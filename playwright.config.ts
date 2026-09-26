@@ -10,7 +10,8 @@ export default defineConfig({
     launchOptions: {
       executablePath: process.env.PLAYWRIGHT_BUNDLED_CHROMIUM
         ? undefined
-        : process.env.CHROMIUM_PATH || '/usr/bin/chromium',
+        : (process.env.CHROMIUM_PATH ??
+          (process.platform === 'linux' ? '/usr/bin/chromium' : undefined)),
       args: ['--no-sandbox'],
     },
     screenshot: 'only-on-failure',

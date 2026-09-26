@@ -119,6 +119,7 @@
       "id": "vaults",
       "name": "Act II — Sunken Vaults",
       "entry": "flooded",
+      "mutator": ["dense_fog"],
       "rooms": [
         {
           "id": "flooded",
@@ -236,6 +237,7 @@
       "id": "fracture",
       "name": "Act III — Fractured Time",
       "entry": "fractured",
+      "mutator": ["temporal_surge"],
       "rooms": [
         {
           "id": "fractured",

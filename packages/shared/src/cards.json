@@ -27,6 +27,24 @@
     "draft": true
   },
   {
+    "id": "toxic_blade",
+    "name": "Toxic blade",
+    "category": "attack",
+    "icon": "✦",
+    "description": "Deal 1 damage to an adjacent enemy and poison them for 3 rounds (1 damage/round).",
+    "range": 1,
+    "draft": true
+  },
+  {
+    "id": "hunters_mark",
+    "name": "Hunter's mark",
+    "category": "support",
+    "icon": "✦",
+    "description": "Mark a living ally or yourself: their next attack deals +1 damage.",
+    "range": 10,
+    "draft": true
+  },
+  {
     "id": "blink",
     "name": "Rift hop",
     "category": "move",

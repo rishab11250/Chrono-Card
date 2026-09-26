@@ -2,7 +2,9 @@ import {
   CARDS,
   ENEMIES,
   LEVELS,
+  MUTATORS,
   nextRoomIds,
+  RELICS,
   type GameState,
   type GameAction,
 } from '@chrono/shared';
@@ -21,7 +23,7 @@ export function validAction(v: unknown): v is GameAction {
   if (v.type === 'end') return true;
   if (v.type === 'play')
     return (
-      integer(v.card, 0, 4) &&
+      integer(v.card, 0, 5) &&
       (v.target === undefined ||
         (object(v.target) &&
           integer(v.target.x, 0, 30) &&
@@ -67,15 +69,29 @@ export function restoreLocalGame(value: unknown): GameState | null {
         integer(p.hp, 0, 100) &&
         integer(p.maxHp, 1, 100) &&
         p.hp <= p.maxHp &&
-        integer(p.shield, 0, 1) &&
+        integer(p.shield, 0, 2) &&
         integer(p.bonus, 0, 2) &&
-        cards(p.hand, 5) &&
+        cards(p.hand, 6) &&
         cards(p.deck, 256) &&
         cards(p.discard, 256) &&
         (p.cooldowns === undefined ||
           (object(p.cooldowns) &&
             Object.entries(p.cooldowns).every(
               ([id, round]) => Object.hasOwn(CARDS, id) && integer(round),
+            ))) &&
+        (p.relics === undefined ||
+          (Array.isArray(p.relics) &&
+            p.relics.every(
+              (id) =>
+                typeof id === 'string' && RELICS.some((r) => r.id === id),
+            ))) &&
+        (p.statuses === undefined ||
+          (Array.isArray(p.statuses) &&
+            p.statuses.every(
+              (st) =>
+                object(st) &&
+                (st.type === 'poison' || st.type === 'stun') &&
+                integer(st.rounds, 0, 100),
             ))),
     )
   )
@@ -121,7 +137,7 @@ export function restoreLocalGame(value: unknown): GameState | null {
     !integer(value.round, 1) ||
     !integer(value.turns, 1) ||
     !integer(value.revision) ||
-    !integer(value.plays, 0, 4) ||
+    !integer(value.plays, 0, 5) ||
     !['playing', 'drafting', 'choosing', 'won', 'lost'].includes(
       String(value.phase),
     )
@@ -139,6 +155,7 @@ export function restoreLocalGame(value: unknown): GameState | null {
     visitedRooms: value.visitedRooms ?? [],
     roomChoices: value.roomChoices ?? [],
     draftChoices: value.draftChoices ?? {},
+    mutators: value.mutators ?? [],
   }) as GameState;
   if (
     !Array.isArray(s.hazards) ||
@@ -161,6 +178,23 @@ export function restoreLocalGame(value: unknown): GameState | null {
     !Object.entries(s.draftChoices).every(
       ([id, offers]) => s.players.some((p) => p.id === id) && cards(offers, 3),
     )
+  )
+    return null;
+  if (
+    !Array.isArray(s.mutators) ||
+    !s.mutators.every((id) => Object.hasOwn(MUTATORS, String(id)))
+  )
+    return null;
+  if (
+    value.turnOrder !== undefined &&
+    !['alternating', 'simultaneous'].includes(String(value.turnOrder))
+  )
+    return null;
+  if (
+    s.decoys !== undefined &&
+    (!Array.isArray(s.decoys) ||
+      s.decoys.length > 16 ||
+      !s.decoys.every((d) => object(d) && pos(d) && integer(d.hp, 0, 100)))
   )
     return null;
   if (s.phase === 'drafting' && !s.draftChoices[s.players[s.active].id]?.length)

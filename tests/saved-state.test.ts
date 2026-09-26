@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { createGame, applyAction } from '@chrono/shared';
-import { restoreLocalGame } from '../packages/client/src/saved-state';
+import {
+  restoreLocalGame,
+  validAction,
+} from '../packages/client/src/saved-state';
 describe('browser save recovery', () => {
   it('restores current saves and fills missing fields on older saves', () => {
     const s = createGame('solo', [{ id: 'a', name: 'A' }]);
@@ -50,5 +53,21 @@ describe('browser save recovery', () => {
       cardId: s.draftChoices.a[0],
     });
     expect(restoreLocalGame(s)).toEqual(s);
+  });
+  it('accepts valid states beyond the launch caps', () => {
+    const s = createGame('solo', [{ id: 'a', name: 'A' }]);
+    s.enemies = [];
+    s.players[0].hand = [
+      'step1',
+      'strike',
+      'shield',
+      'mend',
+      'blink',
+      'snare',
+    ];
+    s.players[0].shield = 2;
+    s.plays = 5;
+    expect(restoreLocalGame(s)).not.toBeNull();
+    expect(validAction({ type: 'play', card: 5 })).toBe(true);
   });
 });

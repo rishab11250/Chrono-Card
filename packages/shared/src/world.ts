@@ -133,7 +133,7 @@ export function applyEventEffect(
   }
 
   if (event.effect === 'trade_hp_for_relic') {
-    if (p.hp <= 3) {
+    if (p.hp <= 6) {
       return {
         ok: false,
         message: `${p.name} does not have enough HP to trade.`,

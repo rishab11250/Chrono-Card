@@ -263,6 +263,29 @@ export async function createApp(
           return;
         }
         httpLimits.set(key, entry);
+      } else if (
+        req.method === 'GET' &&
+        (req.path.startsWith('/api/users') ||
+          /^\/api\/rooms\/[A-Z2-9]{6}$/.test(req.path))
+      ) {
+        const key = `read:${req.ip ?? req.socket.remoteAddress}`;
+        const now = Date.now(),
+          previous = httpLimits.get(key);
+        const entry =
+          previous && now - previous.time < 60_000
+            ? previous
+            : { time: now, count: 0 };
+        if (entry.count++ >= 120) {
+          res.setHeader(
+            'Retry-After',
+            String(Math.max(1, Math.ceil((60_000 - now + entry.time) / 1000))),
+          );
+          res
+            .status(429)
+            .json({ error: 'Too many requests. Try again in a minute.' });
+          return;
+        }
+        httpLimits.set(key, entry);
       }
     }
     next();
@@ -283,8 +306,10 @@ export async function createApp(
   });
   const rooms = new Map<string, Room>();
   const pendingLoads = new Map<string, Promise<Room>>();
+  const reservedCodes = new Set<string>();
   const graceMs = options.graceMs ?? 90_000;
   const maxRooms = 500;
+  let houseTimer: ReturnType<typeof setTimeout> | undefined;
   async function getRoom(code: string): Promise<Room> {
     const current = rooms.get(code);
     if (current) return current;
@@ -323,13 +348,9 @@ export async function createApp(
   function paused(room: Room) {
     if (!room.game || room.game.phase === 'won' || room.game.phase === 'lost')
       return false;
-    if (room.turnOrder === 'simultaneous' && room.game.phase === 'playing') {
-      const living = room.game.players.filter((p) => p.hp > 0);
-      return room.members.some(
-        (m) =>
-          living.some((p) => p.id === m.id) && !m.connected && !m.forfeited,
-      );
-    }
+    // Simultaneous rounds resolve on their own once every connected member has
+    // submitted; only a still-claimed alternating turn should hold everyone.
+    if (room.turnOrder === 'simultaneous') return false;
     const current = room.members.find(
       (m) => m.id === activePlayer(room.game!).id,
     );
@@ -365,8 +386,15 @@ export async function createApp(
       pendingPlans: [...room.pendingActions],
     });
     io.to(room.code).emit('room:state', view(room));
+    nudgeHousekeeping();
   }
-  function resolvePlans(room: Room) {
+  function nudgeHousekeeping() {
+    // Reschedule the next wake-up so a single resolved action triggers
+    // any newly-due deadlines without polling.
+    scheduleNextTick();
+  }
+
+function resolvePlans(room: Room) {
     if (
       room.turnOrder !== 'simultaneous' ||
       room.game?.phase !== 'playing' ||
@@ -374,8 +402,22 @@ export async function createApp(
     )
       return;
     const living = room.game.players.filter((p) => p.hp > 0 && !p.abandoned);
-    if (!living.length || !living.every((p) => room.pendingActions.has(p.id)))
-      return;
+    if (!living.length) return;
+    // Disconnected-but-not-forfeited explorers get an implicit empty plan so
+    // a flaky network doesn't freeze the round; connected/forfeited members
+    // keep their placeholder until they (or the grace path) submit explicitly.
+    for (const p of living) {
+      const member = room.members.find((m) => m.id === p.id);
+      if (!member) continue;
+      if (member.connected || member.forfeited) continue;
+      if (!room.pendingActions.has(p.id)) {
+        room.pendingActions.set(p.id, {
+          type: 'submit-turn',
+          actions: [],
+        });
+      }
+    }
+    if (!living.every((p) => room.pendingActions.has(p.id))) return;
     room.game = resolveSimultaneousRound(
       room.game,
       living.map((p) => ({
@@ -384,6 +426,7 @@ export async function createApp(
       })),
     );
     room.pendingActions.clear();
+    publish(room);
   }
   function unattached(socket: GameSocket) {
     if (socket.data.code) throw new Error('Leave your current room first.');
@@ -427,7 +470,20 @@ export async function createApp(
     if (rooms.size >= maxRooms)
       throw new Error('The server is full. Try again shortly.');
     let code = makeCode();
-    while (rooms.has(code) || (await storage.load(code))) code = makeCode();
+    while (true) {
+      if (rooms.has(code) || reservedCodes.has(code)) {
+        code = makeCode();
+        continue;
+      }
+      reservedCodes.add(code);
+      if (await storage.load(code)) {
+        reservedCodes.delete(code);
+        code = makeCode();
+        continue;
+      }
+      break;
+    }
+    reservedCodes.delete(code);
     const member = makeMember(name, cosmetic);
     member.connected = false;
     member.disconnectedAt = Date.now();
@@ -445,6 +501,7 @@ export async function createApp(
       runId: randomUUID(),
     };
     rooms.set(code, room);
+    scheduleNextTick();
     return { room, member };
   }
   function detach(socket: GameSocket, explicit: boolean) {
@@ -744,8 +801,24 @@ export async function createApp(
         res.status(404).json({ error: 'Player not found.' });
         return;
       }
+      const requester = authUser(req);
+      const isSelf =
+        !!requester &&
+        requester.username.toLowerCase() === user.username.toLowerCase();
       const achievements = storage.getAchievements(user.username);
-      res.json({
+      const publicAchievements = achievements.length;
+      const response: {
+        ok: true;
+        user: {
+          username: string;
+          avatar: string;
+          createdAt: string;
+          stats: { runsPlayed: number; runsWon: number };
+          achievements: { id: string; date: string }[];
+          dailyWins?: number;
+          bestTurns?: number;
+        };
+      } = {
         ok: true,
         user: {
           username: user.username,
@@ -754,15 +827,19 @@ export async function createApp(
           stats: {
             runsPlayed: user.runs_played,
             runsWon: user.runs_won,
-            dailyWins: user.daily_wins,
-            bestTurns: user.best_turns,
           },
-          achievements: achievements.map((a) => ({
-            id: a.achievement_id,
-            date: a.date,
-          })),
+          achievements: isSelf
+            ? achievements.map((a) => ({ id: a.achievement_id, date: a.date }))
+            : publicAchievements
+              ? [{ id: `__count_${publicAchievements}`, date: user.created_at }]
+              : [],
         },
-      });
+      };
+      if (isSelf) {
+        response.user.dailyWins = user.daily_wins;
+        response.user.bestTurns = user.best_turns;
+      }
+      res.json(response);
     } catch {
       res.status(404).json({ error: 'Player not found.' });
     }
@@ -781,7 +858,7 @@ export async function createApp(
       res.status(403).json({ error: 'Origin not allowed.' });
       return;
     }
-    const key = req.socket.remoteAddress ?? 'unknown';
+    const key = req.ip ?? req.socket.remoteAddress ?? 'unknown';
     const limit = httpLimits.get(key);
     const now = Date.now();
     if (limit && now - limit.time < 60_000 && limit.count >= 10) {
@@ -1091,46 +1168,67 @@ export async function createApp(
     socket.on('room:leave', (ack) => run(ack, () => detach(socket, true)));
     socket.on('disconnect', () => detach(socket, false));
   });
-  const timer = setInterval(
-    () => {
-      for (const [key, limit] of httpLimits)
-        if (Date.now() - limit.time >= 60_000) httpLimits.delete(key);
-      for (const room of rooms.values()) {
-        let changed = false;
-        for (const m of [...room.members])
-          if (
-            !m.connected &&
-            !m.forfeited &&
-            m.disconnectedAt &&
-            Date.now() - m.disconnectedAt >= graceMs
-          ) {
-            m.forfeited = true;
-            changed = true;
-            if (room.game) {
-              room.game = abandonPlayer(room.game, m.id);
-              room.pendingActions.delete(m.id);
-              resolvePlans(room);
-            } else room.members = room.members.filter((v) => v.id !== m.id);
-            if (room.host === m.id)
-              room.host = room.members.find((v) => !v.forfeited)?.id ?? '';
+  function tickHousekeeping() {
+    for (const [key, limit] of httpLimits)
+      if (Date.now() - limit.time >= 60_000) httpLimits.delete(key);
+    for (const room of rooms.values()) {
+      let changed = false;
+      for (const m of [...room.members])
+        if (
+          !m.connected &&
+          !m.forfeited &&
+          m.disconnectedAt &&
+          Date.now() - m.disconnectedAt >= graceMs
+        ) {
+          m.forfeited = true;
+          changed = true;
+          if (room.game) {
+            room.game = abandonPlayer(room.game, m.id);
+            room.pendingActions.delete(m.id);
+            resolvePlans(room);
+          } else room.members = room.members.filter((v) => v.id !== m.id);
+          if (room.host === m.id)
+            room.host = room.members.find((v) => !v.forfeited)?.id ?? '';
+        }
+      if (changed) publish(room);
+      if (Date.now() - room.touchedAt > 7_200_000) {
+        io.to(room.code).emit('room:closed', 'This room has expired.');
+        for (const id of io.sockets.adapter.rooms.get(room.code) ?? []) {
+          const socket = io.sockets.sockets.get(id);
+          if (socket) {
+            socket.data = {};
+            socket.leave(room.code);
           }
-        if (changed) publish(room);
-        if (Date.now() - room.touchedAt > 7_200_000) {
-          io.to(room.code).emit('room:closed', 'This room has expired.');
-          for (const id of io.sockets.adapter.rooms.get(room.code) ?? []) {
-            const socket = io.sockets.sockets.get(id);
-            if (socket) {
-              socket.data = {};
-              socket.leave(room.code);
-            }
-          }
-          rooms.delete(room.code);
+        }
+        rooms.delete(room.code);
+      }
+    }
+    scheduleNextTick();
+  }
+  function scheduleNextTick() {
+    if (houseTimer) clearTimeout(houseTimer);
+    if (rooms.size === 0) {
+      // No active rooms: idle until something happens again.
+      return;
+    }
+    // Find the soonest deadline (forfeit or expiry) so the sweep runs only as
+    // often as needed; cap at 1s for snappy UX.
+    let nextDeadline = Date.now() + 1_000;
+    for (const room of rooms.values()) {
+      const expiry = room.touchedAt + 7_200_000;
+      nextDeadline = Math.min(nextDeadline, expiry);
+      for (const m of room.members) {
+        if (!m.connected && !m.forfeited && m.disconnectedAt) {
+          const forfeit = m.disconnectedAt + graceMs;
+          nextDeadline = Math.min(nextDeadline, forfeit);
         }
       }
-    },
-    Math.min(1000, graceMs),
-  );
-  timer.unref();
+    }
+    const wait = Math.max(250, nextDeadline - Date.now());
+    houseTimer = setTimeout(tickHousekeeping, wait);
+    if (houseTimer && typeof houseTimer.unref === 'function') houseTimer.unref();
+  }
+  scheduleNextTick();
   return {
     app,
     http,
@@ -1138,7 +1236,7 @@ export async function createApp(
     rooms,
     storage,
     async close() {
-      clearInterval(timer);
+      if (houseTimer) clearTimeout(houseTimer);
       await new Promise<void>((resolve) => io.close(() => resolve()));
       await storage.close();
     },

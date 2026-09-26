@@ -83,4 +83,17 @@ describe('new telegraphed enemies', () => {
     expect(next.players[0].hp).toBe(12);
     expect(next.enemies[0].intent.charging).toBe(false);
   });
+  it.each(['turret', 'warden_elite'] as const)(
+    '%s does not accumulate attack tiles across rounds',
+    (kind) => {
+      let s = fixture(kind);
+      for (let round = 0; round < 6; round++) {
+        s = applyAction(s, 'a', { type: 'end' });
+        const tiles = s.enemies[0].intent.attack;
+        const unique = new Set(tiles.map((tile) => `${tile.x},${tile.y}`));
+        expect(unique.size).toBe(tiles.length);
+        expect(tiles.length).toBeLessThanOrEqual(kind === 'turret' ? 3 : 8);
+      }
+    },
+  );
 });

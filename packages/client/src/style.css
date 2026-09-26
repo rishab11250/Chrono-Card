@@ -1138,6 +1138,15 @@ input::placeholder {
   gap: 12px;
   margin: 24px 0;
 }
+.about-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0;
+}
+.about-links .button {
+  text-decoration: none;
+}
 .room-code {
   background: #d3d8ba;
   border: 3px dashed #899470;
@@ -2352,6 +2361,30 @@ th {
 .player-relics span {
   font-size: 14px;
   opacity: 0.9;
+}
+.party-statuses {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.party-status {
+  background: #392541;
+  border: 1px solid #5a3b6f;
+  color: #ffc4ff;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-family: Pixel, monospace;
+}
+.party-status.poison {
+  background: #3b1f1f;
+  border-color: #b3575b;
+  color: #ffd1cf;
+}
+.party-status.stun {
+  background: #1f2a3b;
+  border-color: #5773b3;
+  color: #d5e0ff;
 }
 
 .card-count-badge {

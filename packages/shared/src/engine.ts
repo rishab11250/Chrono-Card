@@ -15,18 +15,27 @@ import type {
   Act,
   Enemy,
   EnemyKind,
+  EventId,
   PlayAction,
   Relic,
   StatusEffect,
   StatusType,
 } from './types';
 import {
+  getSmartTarget,
   planHealer,
   planShieldBearer,
   planTeleporter,
   planSummoner,
 } from './enemy-ai';
-import { handleBreakableWall } from './world';
+import {
+  applyEventEffect,
+  applyFogRange,
+  EVENT_DEFINITIONS,
+  getHazardDamage,
+  getStartingPlays,
+  handleBreakableWall,
+} from './world';
 
 export const CARDS = Object.fromEntries(
   cardData.map((card) => [card.id, card]),
@@ -192,7 +201,7 @@ function damageEnemy(s: GameState, e: Enemy, damage: number) {
   }
 }
 function hazard(s: GameState, p: Player) {
-  if (tileAt(s, p) === '~') hit(s, p, 1);
+  if (tileAt(s, p) === '~') hit(s, p, getHazardDamage(s.mutators ?? []));
 }
 function applyStatus(
   target: { statuses?: StatusEffect[] },
@@ -226,10 +235,14 @@ function planEnemies(s: GameState) {
       e.intent.charging = false;
       continue;
     }
+    // Rebuild this round's telegraph; only a charging enemy reuses last round's tiles.
+    e.intent.attack = [];
     if (e.kind === 'bomber') {
       const nearest = nearestLiving(living, e);
-      if (nearest && LEVELS[s.level].tiles[nearest.y][nearest.x] !== 'E')
-        e.intent.hazard = [{ x: nearest.x, y: nearest.y }];
+      e.intent.hazard =
+        nearest && LEVELS[s.level].tiles[nearest.y][nearest.x] !== 'E'
+          ? [{ x: nearest.x, y: nearest.y }]
+          : [];
     } else if (e.kind === 'healer') {
       planHealer(s, e);
     } else if (e.kind === 'shield_bearer') {
@@ -294,12 +307,11 @@ function planEnemies(s: GameState) {
           { x: e.x - direction, y: e.y },
         ];
       } else {
-        const nearest = nearestLiving(living, e);
-        candidates = nearest
-          ? DIRECTIONS.map((d) => ({ x: e.x + d.x, y: e.y + d.y })).sort(
-              (a, b) => distance(a, nearest) - distance(b, nearest),
-            )
-          : [];
+        const pursuers = s.players.filter((p) => p.hp > 0);
+        const smart = pursuers.length
+          ? getSmartTarget(pursuers, e, s.enemies)
+          : undefined;
+        candidates = smart ? smart.candidates : [];
       }
       e.intent.move = candidates.find(
         (p) =>
@@ -321,6 +333,8 @@ function loadLevel(s: GameState) {
   s.phase = 'playing';
   s.roomChoices = [];
   s.visitedRooms = [...(s.visitedRooms ?? []), LEVELS[s.level].id];
+  const act = ACTS.find((entry) => entry.id === LEVELS[s.level].actId);
+  s.mutators = act?.mutator ? [...act.mutator] : [];
   const positions = [
     { x: 1, y: 1 },
     { x: 2, y: 1 },
@@ -368,7 +382,7 @@ function loadLevel(s: GameState) {
     0,
     s.players.findIndex((p) => p.hp > 0),
   );
-  s.plays = 2;
+  s.plays = getStartingPlays(1, s.mutators);
   s.players.forEach((p) => draw(s, p));
   planEnemies(s);
   note(s, `Entered ${LEVELS[s.level].name}. Clear the room to open the exit.`);
@@ -456,6 +470,10 @@ function play(s: GameState, index: number, target?: Position) {
     throw new Error('Choose a card from your hand.');
   const id = p.hand[index];
   const card = CARDS[id];
+  const range =
+    card.category === 'attack'
+      ? applyFogRange(card.range, s.mutators ?? [])
+      : card.range;
   if (s.plays < (card.cost ?? 1))
     throw new Error('No plays left. End your turn.');
   if ((p.cooldowns?.[id] ?? 0) > s.round)
@@ -479,12 +497,15 @@ function play(s: GameState, index: number, target?: Position) {
     throw new Error('Choose a floor tile.');
   const isCombo = p.lastCardCategory === 'move' && card.category === 'attack';
   const comboBonus = isCombo ? 1 : 0;
+  const markBonus = p.bonusDamage ?? 0;
+  const totalAtkBonus = comboBonus + markBonus;
+  if (markBonus > 0 && card.category === 'attack') p.bonusDamage = 0;
   const enemy = enemyAt(s, t);
   const ally = livingAt(s, t);
   if (id === 'blink') {
     if (
       same(p, t) ||
-      distance(p, t) > card.range ||
+      distance(p, t) > range ||
       enemy ||
       ally ||
       decoyAt(s, t)
@@ -506,7 +527,7 @@ function play(s: GameState, index: number, target?: Position) {
           e,
           2 +
             ((activePlayer(s).relics ?? []).includes('sharp_edge') ? 1 : 0) +
-            comboBonus,
+            totalAtkBonus,
         );
     });
     s.enemies = s.enemies.filter((e) => e.hp > 0);
@@ -543,8 +564,8 @@ function play(s: GameState, index: number, target?: Position) {
     id === 'dash'
   ) {
     const path = straightPath(p, t);
-    if (!path.length || path.length > card.range)
-      throw new Error(`Move 1–${card.range} tiles.`);
+    if (!path.length || path.length > range)
+      throw new Error(`Move 1–${range} tiles.`);
     if (
       enemy ||
       ally ||
@@ -605,7 +626,7 @@ function play(s: GameState, index: number, target?: Position) {
     if (
       (!enemy && !isTargetWall) ||
       !path.length ||
-      path.length > card.range ||
+      path.length > range ||
       path
         .slice(0, -1)
         .some(
@@ -622,16 +643,18 @@ function play(s: GameState, index: number, target?: Position) {
       const bonus = (activePlayer(s).relics ?? []).includes('sharp_edge')
         ? 1
         : 0;
+      const attackTier: Record<string, number> = {
+        strike_plus: 3,
+        arrow_plus: 3,
+        quickshot: 1,
+        toxic_blade: 1,
+      };
       damageEnemy(
         s,
         enemy,
-        (id === 'strike_plus' || id === 'arrow_plus'
-          ? 3
-          : id === 'quickshot'
-            ? 1
-            : 2) +
+        (attackTier[id] ?? (id === 'strike' || id === 'arrow' ? 2 : 2)) +
           bonus +
-          comboBonus,
+          totalAtkBonus,
       );
       s.enemies = s.enemies.filter((e) => e.hp > 0);
     }
@@ -661,7 +684,7 @@ function play(s: GameState, index: number, target?: Position) {
       const dx = Math.sign(e.x - p.x);
       const dy = Math.sign(e.y - p.y);
       const dest = { x: e.x + dx, y: e.y + dy };
-      damageEnemy(s, e, 1 + comboBonus);
+      damageEnemy(s, e, 1 + totalAtkBonus);
       if (
         tileAt(s, dest) !== '#' &&
         tileAt(s, dest) !== 'B' &&
@@ -679,7 +702,7 @@ function play(s: GameState, index: number, target?: Position) {
     if (
       !enemy ||
       !path.length ||
-      path.length > card.range ||
+      path.length > range ||
       path
         .slice(0, -1)
         .some(
@@ -692,7 +715,7 @@ function play(s: GameState, index: number, target?: Position) {
         )
     )
       throw new Error('Choose an enemy in clear range.');
-    damageEnemy(s, enemy, 1 + comboBonus);
+    damageEnemy(s, enemy, 1 + totalAtkBonus);
     note(s, `${ENEMIES[enemy.kind].name} is struck by chain spark.`);
     for (const other of s.enemies) {
       if (other.id !== enemy.id && distance(enemy, other) === 1) {
@@ -703,7 +726,7 @@ function play(s: GameState, index: number, target?: Position) {
     s.enemies = s.enemies.filter((e) => e.hp > 0);
     handleBreakableWall(s, t);
   } else if (id === 'snare') {
-    if (!enemy || distance(p, t) > card.range)
+    if (!enemy || distance(p, t) > range)
       throw new Error('Choose an enemy within range.');
     applyStatus(enemy, { type: 'poison', rounds: 3 });
     note(s, `${ENEMIES[enemy.kind].name} is poisoned!`);
@@ -711,12 +734,12 @@ function play(s: GameState, index: number, target?: Position) {
     if (
       same(p, t) ||
       (p.x !== t.x && p.y !== t.y) ||
-      distance(p, t) > card.range
+      distance(p, t) > range
     )
       throw new Error('Choose a tile in a straight line up to 3 tiles.');
     const d = { x: Math.sign(t.x - p.x), y: Math.sign(t.y - p.y) };
     const beam: Position[] = [];
-    for (let n = 1; n <= card.range; n++) {
+    for (let n = 1; n <= range; n++) {
       const pos = { x: p.x + d.x * n, y: p.y + d.y * n };
       if (tileAt(s, pos) === '#') break;
       beam.push(pos);
@@ -728,7 +751,7 @@ function play(s: GameState, index: number, target?: Position) {
     );
     if (!hitEnemies.length) throw new Error('No enemies in line of fire.');
     const bonus = (activePlayer(s).relics ?? []).includes('sharp_edge') ? 1 : 0;
-    const totalDmg = 2 + bonus + comboBonus;
+    const totalDmg = 2 + bonus + totalAtkBonus;
     hitEnemies.forEach((e) => {
       damageEnemy(s, e, totalDmg);
     });
@@ -748,7 +771,7 @@ function play(s: GameState, index: number, target?: Position) {
   } else if (id === 'decoy') {
     if (
       same(p, t) ||
-      distance(p, t) > card.range ||
+      distance(p, t) > range ||
       tileAt(s, t) === '#' ||
       livingAt(s, t) ||
       enemyAt(s, t) ||
@@ -765,6 +788,19 @@ function play(s: GameState, index: number, target?: Position) {
       maxHp: 2,
     });
     note(s, `${p.name} deployed a decoy.`);
+  } else if (id === 'toxic_blade') {
+    if (!enemy || distance(p, t) > range)
+      throw new Error('Choose an enemy within range.');
+    damageEnemy(s, enemy, 1);
+    applyStatus(enemy, { type: 'poison', rounds: 3 });
+    note(s, `${ENEMIES[enemy.kind].name} is poisoned!`);
+    s.enemies = s.enemies.filter((e) => e.hp > 0);
+  } else if (id === 'hunters_mark') {
+    if (!ally || ally.hp <= 0)
+      throw new Error('Choose a living explorer to mark.');
+    const markTarget = ally.id === p.id ? p : ally;
+    markTarget.bonusDamage = (markTarget.bonusDamage ?? 0) + 1;
+    note(s, `${markTarget.name} prepares a marked strike.`);
   }
   p.hand.splice(index, 1);
   p.discard.push(id);
@@ -908,7 +944,7 @@ function advance(s: GameState) {
   s.turns++;
   const p = activePlayer(s);
   p.lastCardCategory = undefined;
-  s.plays = 2 + p.bonus;
+  s.plays = getStartingPlays(s.round, s.mutators ?? []) + p.bonus;
   p.bonus = 0;
   if (hasStatus(p, 'poison')) {
     hit(s, p, 1);
@@ -954,6 +990,14 @@ function checkOutcome(s: GameState) {
       note(s, 'You escaped the cycle.');
     } else {
       s.phase = 'drafting';
+      if (random(s) < 0.5) {
+        const eventIds = Object.keys(EVENT_DEFINITIONS) as EventId[];
+        for (const player of s.players.filter((entry) => !entry.abandoned)) {
+          const eventId =
+            eventIds[Math.floor(random(s) * eventIds.length)] ?? eventIds[0];
+          note(s, applyEventEffect(s, eventId, player.id).message);
+        }
+      }
       const pool = Object.values(CARDS)
         .filter((card) => card.draft)
         .map((card) => card.id);
@@ -1176,7 +1220,11 @@ export function legalTargets(s: GameState, card: number): Position[] {
       )
         continue;
       // Skip tiles out of card range (Manhattan distance)
-      if (c.range > 0 && distance(p, t) > c.range) continue;
+      const range =
+        c.category === 'attack'
+          ? applyFogRange(c.range, s.mutators ?? [])
+          : c.range;
+      if (range > 0 && distance(p, t) > range) continue;
       try {
         play(structuredClone(s), card, t);
         targets.push(t);

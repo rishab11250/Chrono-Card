@@ -6,13 +6,11 @@ import {
   distance,
   same,
   ENEMIES,
-  LEVELS,
   getSmartTarget,
   planHealer,
   planShieldBearer,
   planTeleporter,
   planSummoner,
-  planBomberAim,
   type GameState,
   type Enemy,
   type Player,
@@ -501,41 +499,3 @@ describe('planSummoner', () => {
   });
 });
 
-describe('planBomberAim', () => {
-  it('aims at tile between closest player and exit to cut off escape', () => {
-    const s = createTestGame();
-    s.players[0].x = 2;
-    s.players[0].y = 2;
-
-    const level = LEVELS[s.level];
-    let exitPos = { x: 8, y: 8 };
-    for (let y = 0; y < level.height; y++) {
-      const x = level.tiles[y].indexOf('E');
-      if (x !== -1) {
-        exitPos = { x, y };
-        break;
-      }
-    }
-
-    const bomber: Enemy = {
-      id: 'b1',
-      kind: 'bomber',
-      x: 5,
-      y: 5,
-      hp: 2,
-      heading: 0,
-      intent: { attack: [] },
-    };
-    s.enemies = [bomber];
-
-    const aim = planBomberAim(s, bomber);
-    expect(aim).toBeDefined();
-    expect(bomber.intent.hazard).toBeDefined();
-    expect(bomber.intent.hazard![0]).toEqual({ x: aim.x, y: aim.y });
-
-    // The aim tile should be closer to exit than player is, or equal to player's position
-    const playerDist = distance(s.players[0], exitPos);
-    const aimDist = distance(aim, exitPos);
-    expect(aimDist).toBeLessThanOrEqual(playerDist);
-  });
-});

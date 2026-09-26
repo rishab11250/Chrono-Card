@@ -21,6 +21,7 @@ import {
   type Position,
   type RoomView,
   type UserProfile,
+  MUTATORS,
   RELICS,
   type RelicId,
   calculateScore,
@@ -513,6 +514,7 @@ $('#app').innerHTML = `
         <button id="achievements-button" class="tool-btn" title="Achievements" aria-label="Achievements">🏆</button>
         <button id="cosmetics-button" class="tool-btn" title="Explorer skins" aria-label="Explorer skins">🎨</button>
         <button id="help-button" class="tool-btn" title="How to play (?)" aria-label="How to play"><kbd>?</kbd></button>
+        <button id="about-button" class="tool-btn" title="About &amp; links" aria-label="About and links">ⓘ</button>
         <button id="sound-button" class="tool-btn" aria-pressed="false" title="Sound: Off (Click to toggle)" aria-label="Toggle sound">🔇</button>
       </div>
     </div>
@@ -952,28 +954,20 @@ function render() {
   $('#chapter-label').textContent =
     `CHAPTER ${String(game.level + 1).padStart(2, '0')} / ${String(LEVELS.length).padStart(2, '0')}`;
   $('#room-name').textContent = level.name;
-  const actIndex = ACTS.findIndex((act) => act.id === level.actId);
-  const actMutatorLabels: Record<
-    number,
-    { name: string; icon: string; desc: string }
-  > = {
-    1: {
-      name: 'Dense Fog',
-      icon: '🌫',
-      desc: 'All projectile ranges reduced by 1',
-    },
-    2: {
-      name: 'Temporal Surge',
-      icon: '⚡',
-      desc: '+1 action play on turn 1 of each room',
-    },
+  const mutatorIcons: Record<string, string> = {
+    dense_fog: '🌫',
+    unstable_ground: '⚠',
+    temporal_surge: '⚡',
   };
-  const activeMutator = actMutatorLabels[actIndex];
-  $('#room-subtitle').innerHTML = `${escape(level.subtitle)}${
-    activeMutator
-      ? ` <span class="act-mutator-tag" title="${activeMutator.desc}">${activeMutator.icon} ${activeMutator.name}</span>`
-      : ''
-  }`;
+  const activeMutators = (game.mutators ?? [])
+    .map((id) => ({ ...MUTATORS[id], icon: mutatorIcons[id] ?? '✦' }))
+    .filter((mutator) => mutator.id)
+    .map(
+      (mutator) =>
+        ` <span class="act-mutator-tag" title="${escape(mutator.description)}">${mutator.icon} ${escape(mutator.name)}</span>`,
+    )
+    .join('');
+  $('#room-subtitle').innerHTML = `${escape(level.subtitle)}${activeMutators}`;
   const acts = ACTS.map((act) => ({
     name: act.name.split(' — ')[0],
     start: LEVELS.findIndex((level) => level.id === act.entry),
@@ -1051,6 +1045,15 @@ function render() {
     .map(
       (player, i) =>
         `<div class="party-member ${player.id === p.id ? 'current-player' : ''}"><div class="portrait player-${i}">${icon('explorer')}<span>${i + 1}</span></div><div class="party-details"><div><strong>${escape(player.name)}</strong><small>${player.hp <= 0 ? (player.abandoned ? 'LEFT' : 'FALLEN') : player.id === p.id ? 'ACTIVE' : 'READY'}</small></div><div class="hearts" aria-hidden="true">${Array.from({ length: Math.ceil(player.maxHp / 2) }, (_, heart) => `<span class="${player.hp > heart * 2 ? '' : 'empty-heart'}">${icon('heart')}</span>`).join('')}</div><div class="hp-label"><span>HP ${player.hp} <span>/ ${player.maxHp}</span></span><span>${player.shield ? '◇ Shielded' : 'Explorer'}</span></div>${
+          player.id === p.id && (player.statuses ?? []).length
+            ? `<div class="party-statuses">${(player.statuses ?? [])
+                .map(
+                  (status) =>
+                    `<span class="party-status ${status.type}" title="${status.rounds} round${status.rounds === 1 ? '' : 's'}">${status.type === 'poison' ? '☠ poison' : '✦ stun'} ${status.rounds}</span>`,
+                )
+                .join('')}</div>`
+            : ''
+        }${
           player.relics?.length
             ? `<div class="player-relics">${player.relics
                 .map((rId) => {
@@ -1790,6 +1793,15 @@ function help() {
   );
   $('#help-done').onclick = () => modal.close();
 }
+const GITHUB_URL = 'https://github.com/rishab11250/Chrono-Card';
+const LIVE_URL = 'https://chrono-card.onrender.com';
+function showAbout() {
+  showModal(
+    'Chrono Card',
+    `<p>Your hand is your movement. A tactical dungeon crawler across three Acts, for one to four explorers.</p><div class="about-links"><a class="button primary" href="${GITHUB_URL}" target="_blank" rel="noopener noreferrer">Source on GitHub ↗</a><a class="button subtle" href="${LIVE_URL}" target="_blank" rel="noopener noreferrer">Play online ↗</a><a class="button subtle" href="${GITHUB_URL}/issues" target="_blank" rel="noopener noreferrer">Report a bug ↗</a></div><p>Original pixel art · TypeScript · Phaser 3 · Socket.IO</p>`,
+    'ABOUT THIS GAME',
+  );
+}
 net.onEmote = (data) => {
   const member = room?.members.find((m) => m.id === data.playerId);
   const name = member?.name ?? 'Explorer';
@@ -1883,6 +1895,7 @@ auth.onChange = () => updateProfileBadge();
 void auth.init().then(() => updateProfileBadge());
 $('#cosmetics-button').onclick = showCosmeticsModal;
 $('#help-button').onclick = help;
+$('#about-button').onclick = showAbout;
 $('#sound-button').onclick = () => {
   sound = !sound;
   $('#sound-button').innerHTML = sound ? '🔊' : '🔇';
